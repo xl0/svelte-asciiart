@@ -45,7 +45,7 @@
 	let marginBottom = $state(1);
 	let marginLeft = $state(2);
 
-	let gridStroke = $state('#90EE90');
+	let gridStroke = $state('#87CEFA');
 	let gridStrokeWidth = $state(0.03);
 	let gridOpacity = $state(0.5);
 	let frameStroke = $state('#FFB366');
@@ -204,36 +204,44 @@
 					</div>
 				</div>
 
-				<div class="space-y-4">
-					<Label class="text-sm font-medium">Grid Style</Label>
-					<div class="grid grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Color</Label>
-							<Input type="color" bind:value={gridStroke} class="h-9 w-full" />
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Line Style</Label>
-							<Select.Root type="single" bind:value={gridLineStyle}>
-								<Select.Trigger class="w-full">
-									{lineStyles.find((s) => s.value === gridLineStyle)?.label ?? 'Solid'}
-								</Select.Trigger>
-								<Select.Content>
-									{#each lineStyles as style}
-										<Select.Item value={style.value}>{style.label}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Width: {gridStrokeWidth}</Label>
-							<Slider type="single" bind:value={gridStrokeWidth} min={0.01} max={0.1} step={0.01} />
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Opacity: {gridOpacity}</Label>
-							<Slider type="single" bind:value={gridOpacity} min={0} max={1} step={0.05} />
+				{#if showGrid}
+					<div class="space-y-4">
+						<Label class="text-sm font-medium">Grid Style</Label>
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Color</Label>
+								<Input type="color" bind:value={gridStroke} class="h-9 w-full" />
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Line Style</Label>
+								<Select.Root type="single" bind:value={gridLineStyle}>
+									<Select.Trigger class="w-full">
+										{lineStyles.find((s) => s.value === gridLineStyle)?.label ?? 'Solid'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each lineStyles as style}
+											<Select.Item value={style.value}>{style.label}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Width: {gridStrokeWidth}</Label>
+								<Slider
+									type="single"
+									bind:value={gridStrokeWidth}
+									min={0.01}
+									max={0.1}
+									step={0.01}
+								/>
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Opacity: {gridOpacity}</Label>
+								<Slider type="single" bind:value={gridOpacity} min={0} max={1} step={0.05} />
+							</div>
 						</div>
 					</div>
-				</div>
+				{/if}
 
 				{#if frame}
 					<div class="space-y-4">

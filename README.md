@@ -1,5 +1,7 @@
 # svelte-asciiart
 
+[![](https://alexey.work/badge/)](https://alexey.work?ref=ascii-md)
+
 A Svelte 5 component for rendering ASCII art as scalable SVG with optional grid overlay and frame.
 
 ## Installation
