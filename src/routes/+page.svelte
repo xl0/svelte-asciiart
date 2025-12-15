@@ -137,23 +137,26 @@
 	});
 
 	let highlightedCode = $state('');
+	let highlightedInstall = $state('');
 
 	$effect(() => {
 		const code = codePreview;
 		codeToHtml(code, { lang: 'svelte', theme: 'github-dark' }).then((html) => {
 			highlightedCode = html;
 		});
+		codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' }).then(
+			(html) => {
+				highlightedInstall = html;
+			}
+		);
 	});
 </script>
 
-<div class="mx-auto max-w-6xl p-8">
-	<h1 class="mb-8 text-3xl font-bold">AsciiArt Demo</h1>
+<div class="mx-auto max-w-6xl p-6">
+	<h1 class="mb-6 text-3xl font-bold">AsciiArt Demo</h1>
 
-	<div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<Card.Root>
-			<Card.Header>
-				<Card.Title>Controls</Card.Title>
-			</Card.Header>
 			<Card.Content class="space-y-6">
 				<div class="space-y-2">
 					<Label for="ascii-input">ASCII Art</Label>
@@ -280,24 +283,19 @@
 			</Card.Content>
 		</Card.Root>
 
-		<div class="space-y-8">
-			<Card.Root>
-				<Card.Header>
-					<Card.Title>Preview</Card.Title>
-				</Card.Header>
-				<Card.Content>
-					<div class="aspect-square w-full rounded border border-border bg-card">
-						<AsciiArt {text} {rows} {cols} grid {frame} {frameMargin} {gridStyle} {frameStyle} />
-					</div>
-				</Card.Content>
-			</Card.Root>
+		<div class="space-y-6">
+			<div class="w-full resize overflow-auto rounded-sm border border-border bg-card">
+				<AsciiArt {text} {rows} {cols} grid {frame} {frameMargin} {gridStyle} {frameStyle} />
+			</div>
 
 			<Card.Root>
-				<Card.Header>
-					<Card.Title>Code</Card.Title>
-				</Card.Header>
 				<Card.Content>
-					<div class="overflow-x-auto rounded text-sm [&_pre]:p-4">
+					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
+						{@html highlightedInstall}
+					</div>
+					</Card.Content>
+					<Card.Content>
+					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
 						{@html highlightedCode}
 					</div>
 				</Card.Content>
