@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type { SVGAttributes } from 'svelte/elements';
 
 	type Margin = number | [number, number] | [number, number, number, number];
 
 	// Props
-	interface Props {
+	interface Props extends SVGAttributes<SVGSVGElement> {
 		text: string;
 		rows?: number;
 		cols?: number;
@@ -13,7 +14,6 @@
 		measureCellAspect?: boolean;
 		gridClass?: string;
 		gridStyle?: string;
-		fontFamily?: string;
 		frame?: boolean;
 		frameMargin?: Margin;
 		frameClass?: string;
@@ -29,11 +29,11 @@
 		measureCellAspect = false,
 		gridClass = '',
 		gridStyle = '',
-		fontFamily = "'Courier New', Consolas, 'Liberation Mono', monospace",
 		frame = false,
 		frameMargin = 0,
 		frameClass = '',
-		frameStyle = ''
+		frameStyle = '',
+		...rest
 	}: Props = $props();
 
 	function parseMargin(m: Margin): { top: number; right: number; bottom: number; left: number } {
@@ -75,7 +75,9 @@
 			svg.style.overflow = 'hidden';
 
 			const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-			textEl.setAttribute('font-family', fontFamily);
+			const svgClass = (rest as { class?: string }).class;
+			if (svgClass) textEl.setAttribute('class', svgClass);
+			textEl.setAttribute('style', `font-family: var(--ascii-font-family, ${defaultFontStack});`);
 			textEl.setAttribute('font-size', '100');
 			textEl.setAttribute('xml:space', 'preserve');
 			textEl.textContent = 'M';
@@ -96,6 +98,8 @@
 	const charWidth = 0.6;
 	const charHeight = 1;
 	const lineHeight = 1.2;
+	const defaultFontStack =
+		'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
 	// Calculate viewBox dimensions (include margin for grid mode)
 	const totalCols = $derived(grid ? derivedCols + margin.left + margin.right : derivedCols);
@@ -109,10 +113,11 @@
 </script>
 
 <svg
+	{...rest}
 	viewBox="0 0 {viewBoxWidth} {viewBoxHeight}"
 	preserveAspectRatio="xMinYMin meet"
 	xmlns="http://www.w3.org/2000/svg"
-	style="width: 100%; height: 100%;"
+	style="width: 100%; height: 100%; font-family: var(--ascii-font-family, {defaultFontStack});"
 >
 	{#if grid}
 		{@const totalGridCols = Array.from({ length: totalCols + 1 }, (_, c) => c)}
@@ -140,13 +145,7 @@
 		{/if}
 
 		{#each lines as line, r}
-			<text
-				y={offsetY + r + 0.8}
-				font-family={fontFamily}
-				font-size="0.9"
-				fill="currentColor"
-				xml:space="preserve"
-			>
+			<text y={offsetY + r + 0.8} font-size="0.9" fill="currentColor" xml:space="preserve">
 				{#each line.split('') as ch, c}
 					<tspan x={offsetX + c * measuredCellAspect + 0.1 * measuredCellAspect}>{ch}</tspan>
 				{/each}
@@ -154,7 +153,6 @@
 		{/each}
 	{:else}
 		<text
-			font-family={fontFamily}
 			font-size="1"
 			fill="currentColor"
 			dominant-baseline="text-before-edge"

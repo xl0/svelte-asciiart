@@ -4,6 +4,36 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.ascii-font-system {
+	--ascii-font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+		monospace;
+}
+.ascii-font-jetbrains {
+	--ascii-font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.ascii-font-fira {
+	--ascii-font-family: 'Fira Code', ui-monospace, monospace;
+}
+.ascii-font-source {
+	--ascii-font-family: 'Source Code Pro', ui-monospace, monospace;
+}
+.ascii-font-plex {
+	--ascii-font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.ascii-font-courier {
+	--ascii-font-family: 'Courier New', Courier, monospace;
+}
+.ascii-font-consolas {
+	--ascii-font-family: Consolas, 'Liberation Mono', monospace;
+}
+.ascii-font-menlo {
+	--ascii-font-family: Menlo, Monaco, monospace;
+}
+.ascii-font-monaco {
+	--ascii-font-family: Monaco, monospace;
+}
+
 :root {
 	--radius: 0.25rem;
 	--background: oklch(1 0 0);

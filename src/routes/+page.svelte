@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Slider } from '$lib/components/ui/slider';
 	import { Input } from '$lib/components/ui/input';
+	import { Check, Copy } from '@lucide/svelte';
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import { codeToHtml } from 'shiki';
@@ -15,6 +16,33 @@
 		{ value: 'dotted', label: 'Dotted · · ·' },
 		{ value: 'dashdot', label: 'Dash-dot -·-·-' }
 	] as const;
+
+	const monoFonts = [
+		{
+			key: 'system',
+			label: 'System',
+			family:
+				'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+		},
+		{
+			key: 'jetbrains',
+			label: 'JetBrains Mono',
+			family: '"JetBrains Mono", ui-monospace, monospace'
+		},
+		{ key: 'fira', label: 'Fira Code', family: '"Fira Code", ui-monospace, monospace' },
+		{
+			key: 'source',
+			label: 'Source Code Pro',
+			family: '"Source Code Pro", ui-monospace, monospace'
+		},
+		{ key: 'plex', label: 'IBM Plex Mono', family: '"IBM Plex Mono", ui-monospace, monospace' },
+		{ key: 'courier', label: 'Courier New', family: '"Courier New", Courier, monospace' },
+		{ key: 'consolas', label: 'Consolas', family: 'Consolas, "Liberation Mono", monospace' },
+		{ key: 'menlo', label: 'Menlo', family: 'Menlo, Monaco, monospace' },
+		{ key: 'monaco', label: 'Monaco', family: 'Monaco, monospace' }
+	] as const;
+
+	const defaultFontKey = monoFonts[0].key;
 
 	function getDashArray(style: string, width: number): string {
 		const unit = width * 4;
@@ -44,6 +72,8 @@
 	let marginRight = $state(2);
 	let marginBottom = $state(1);
 	let marginLeft = $state(2);
+	let fontKey = $state<(typeof monoFonts)[number]['key']>(defaultFontKey);
+	const fontClass = $derived(`ascii-font-${fontKey}`);
 
 	let gridStroke = $state('#87CEFA');
 	let gridStrokeWidth = $state(0.03);
@@ -100,10 +130,58 @@
 		return `\n  frameMargin={[${marginTop}, ${marginRight}, ${marginBottom}, ${marginLeft}]}`;
 	}
 
+	function buildClassProp(): string {
+		if (fontKey === defaultFontKey) return '';
+		return `\n  class="ascii-font-${fontKey}"`;
+	}
+
+	function buildFontCss(): string {
+		if (fontKey === defaultFontKey) return '';
+		const family = monoFonts.find((f) => f.key === fontKey)?.family;
+		if (!family) return '';
+		return [`.ascii-font-${fontKey} {`, `  --ascii-font-family: ${family};`, `}`].join('\n');
+	}
+
+	function buildFontHead(): string {
+		let gfFamily = '';
+		switch (fontKey) {
+			case 'jetbrains':
+				gfFamily = 'JetBrains+Mono:wght@400;600';
+				break;
+			case 'fira':
+				gfFamily = 'Fira+Code:wght@400;600';
+				break;
+			case 'source':
+				gfFamily = 'Source+Code+Pro:wght@400;600';
+				break;
+			case 'plex':
+				gfFamily = 'IBM+Plex+Mono:wght@400;600';
+				break;
+		}
+		if (!gfFamily) return '';
+		return [
+			'<svelte:head>',
+			'  <link rel="preconnect" href="https://fonts.googleapis.com" />',
+			'  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />',
+			'  <link',
+			'    rel="stylesheet"',
+			`    href="https://fonts.googleapis.com/css2?family=${gfFamily}&display=swap"`,
+			'  />',
+			'</svelte:head>'
+		].join('\n');
+	}
+
 	let codePreview = $derived.by(() => {
 		const escapedText = text.replace(/`/g, '\\`');
 		const marginProp = buildMarginProp();
+		const classProp = buildClassProp();
+		const fontCss = buildFontCss();
+		const fontHead = buildFontHead();
 		const lines: string[] = [];
+		if (fontHead) {
+			lines.push(fontHead);
+			lines.push('');
+		}
 		lines.push('<script>');
 		lines.push(`  const text = \`${escapedText}\`;`);
 		lines.push('</\\/script>');
@@ -115,12 +193,14 @@
 		lines.push('  grid');
 		if (frame) lines.push('  frame');
 		if (marginProp) lines.push(marginProp.slice(1));
+		if (classProp) lines.push(classProp.slice(1));
 		if (showGrid) lines.push('  gridClass="ascii-grid"');
 		if (frame) lines.push('  frameClass="ascii-frame"');
 		lines.push('/>');
 		lines.push('');
-		if (showGrid || frame) {
+		if (showGrid || frame || fontCss) {
 			lines.push('<style>');
+			if (fontCss) lines.push(`  ${fontCss.replaceAll('\n', '\n  ')}`);
 			if (showGrid) {
 				lines.push('  .ascii-grid {');
 				lines.push(`    ${buildGridCss()};`);
@@ -150,6 +230,41 @@
 			}
 		);
 	});
+
+	let exampleCodeEl: HTMLDivElement | null = null;
+	let copied = $state(false);
+	let copiedTimeout: ReturnType<typeof setTimeout> | undefined;
+
+	async function copyExampleCode() {
+		try {
+			await navigator.clipboard.writeText(codePreview);
+		} catch {
+			const ta = document.createElement('textarea');
+			ta.value = codePreview;
+			ta.style.position = 'fixed';
+			ta.style.left = '-99999px';
+			document.body.append(ta);
+			ta.select();
+			document.execCommand('copy');
+			ta.remove();
+		}
+		copied = true;
+		if (copiedTimeout) clearTimeout(copiedTimeout);
+		copiedTimeout = setTimeout(() => {
+			copied = false;
+		}, 1000);
+	}
+
+	function onExampleKeydown(e: KeyboardEvent) {
+		if (e.key.toLowerCase() !== 'a' || !(e.metaKey || e.ctrlKey) || !exampleCodeEl) return;
+		e.preventDefault();
+		const sel = window.getSelection();
+		if (!sel) return;
+		const range = document.createRange();
+		range.selectNodeContents(exampleCodeEl);
+		sel.removeAllRanges();
+		sel.addRange(range);
+	}
 </script>
 
 <div class="mx-auto max-w-6xl p-6">
@@ -172,6 +287,20 @@
 						<Switch id="frame-toggle" bind:checked={frame} />
 						<Label for="frame-toggle">Frame</Label>
 					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label class="text-sm font-medium">Font</Label>
+					<Select.Root type="single" bind:value={fontKey}>
+						<Select.Trigger class="w-full">
+							{monoFonts.find((f) => f.key === fontKey)?.label ?? 'System'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each monoFonts as f}
+								<Select.Item value={f.key}>{f.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<div class="space-y-4">
@@ -285,18 +414,52 @@
 
 		<div class="space-y-6">
 			<div class="w-full resize overflow-auto rounded-sm border border-border bg-card">
-				<AsciiArt {text} {rows} {cols} grid {frame} {frameMargin} {gridStyle} {frameStyle} />
+				<AsciiArt
+					{text}
+					{rows}
+					{cols}
+					grid
+					{frame}
+					{frameMargin}
+					{gridStyle}
+					{frameStyle}
+					class={fontKey !== 'system' ? `ascii-font-${fontKey}` : ''}
+				/>
 			</div>
 
 			<Card.Root>
 				<Card.Content>
-					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
+					<div
+						class="overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
+					>
 						{@html highlightedInstall}
 					</div>
 				</Card.Content>
 				<Card.Content>
-					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
-						{@html highlightedCode}
+					<div
+						class="group relative overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
+					>
+						<button
+							type="button"
+							class="absolute top-2 right-2 rounded border border-border bg-background/80 p-1.5 text-foreground opacity-0 backdrop-blur transition-opacity group-hover:opacity-100"
+							onclick={copyExampleCode}
+							title={copied ? 'Copied' : 'Copy'}
+						>
+							{#if copied}
+								<Check class="h-4 w-4" />
+							{:else}
+								<Copy class="h-4 w-4" />
+							{/if}
+						</button>
+						<div
+							bind:this={exampleCodeEl}
+							role="textbox"
+							tabindex="0"
+							aria-label="Example code"
+							onkeydown={onExampleKeydown}
+						>
+							{@html highlightedCode}
+						</div>
 					</div>
 				</Card.Content>
 			</Card.Root>
