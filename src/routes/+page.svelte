@@ -30,16 +30,16 @@
 		}
 	}
 
-	const defaultArt = `+----------+
-|  Hello   |
-|  World!  |
+	const defaultArt = `+----------+	   _o<
+|  Hello   |	  \`\\\,_
+|  World!  |	(_)/ (_)
 +----------+`;
 
 	let text = $state(defaultArt);
 	let frame = $state(true);
 	let showGrid = $state(true);
 	let rows = $state(4);
-	let cols = $state(12);
+	let cols = $state(22);
 	let marginTop = $state(1);
 	let marginRight = $state(2);
 	let marginBottom = $state(1);
@@ -293,8 +293,8 @@
 					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
 						{@html highlightedInstall}
 					</div>
-					</Card.Content>
-					<Card.Content>
+				</Card.Content>
+				<Card.Content>
 					<div class="overflow-x-auto rounded-sm text-sm [&_pre]:p-4">
 						{@html highlightedCode}
 					</div>
