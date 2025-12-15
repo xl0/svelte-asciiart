@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { AsciiArt } from '$lib';
-	import { Textarea } from '$demo/components/ui/textarea';
-	import { Switch } from '$demo/components/ui/switch';
-	import { Label } from '$demo/components/ui/label';
-	import { Slider } from '$demo/components/ui/slider';
-	import { Input } from '$demo/components/ui/input';
-	import * as Card from '$demo/components/ui/card';
-	import * as Select from '$demo/components/ui/select';
+	import { AsciiArt } from 'svelte-asciiart';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import { Switch } from '$lib/components/ui/switch';
+	import { Label } from '$lib/components/ui/label';
+	import { Slider } from '$lib/components/ui/slider';
+	import { Input } from '$lib/components/ui/input';
+	import * as Card from '$lib/components/ui/card';
+	import * as Select from '$lib/components/ui/select';
 	import { codeToHtml } from 'shiki';
 
 	const lineStyles = [
