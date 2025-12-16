@@ -49,14 +49,21 @@
 		const unit = width * 4;
 		switch (style) {
 			case 'dashed':
-				return `${unit * 3} ${unit * 2}`;
+				return `${fmt(unit * 3)} ${fmt(unit * 2)}`;
 			case 'dotted':
-				return `${unit} ${unit}`;
+				return `${fmt(unit)} ${fmt(unit)}`;
 			case 'dashdot':
-				return `${unit * 3} ${unit} ${unit} ${unit}`;
+				return `${fmt(unit * 3)} ${fmt(unit)} ${fmt(unit)} ${fmt(unit)}`;
 			default:
 				return 'none';
 		}
+	}
+
+	function fmt(n: number, digits = 3): string {
+		if (!Number.isFinite(n)) return String(n);
+		if (Math.abs(n) < 1e-12) return '0';
+		const s = n.toFixed(digits);
+		return s.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 	}
 
 	const defaultArt = `+----------+	   _o<
@@ -103,10 +110,10 @@
 		const hasMargin = marginTop > 0 || marginRight > 0 || marginBottom > 0 || marginLeft > 0;
 		if (!hasMargin) return '';
 		if (marginTop === marginBottom && marginLeft === marginRight) {
-			if (marginTop === marginLeft) return `\n  margin={${marginTop}}`;
-			return `\n  margin={[${marginTop}, ${marginLeft}]}`;
+			if (marginTop === marginLeft) return `\n  margin={${fmt(marginTop)}}`;
+			return `\n  margin={[${fmt(marginTop)}, ${fmt(marginLeft)}]}`;
 		}
-		return `\n  margin={[${marginTop}, ${marginRight}, ${marginBottom}, ${marginLeft}]}`;
+		return `\n  margin={[${fmt(marginTop)}, ${fmt(marginRight)}, ${fmt(marginBottom)}, ${fmt(marginLeft)}]}`;
 	}
 
 	function buildClassProp(): string {
@@ -174,18 +181,19 @@
 			lines.push('');
 		}
 		lines.push('<script>');
+		lines.push("  import { AsciiArt } from 'svelte-asciiart';");
 		if (bindSvg) {
 			lines.push('  let svg = $state<SVGSVGElement>();');
 		}
 		lines.push(`  const text = \`${escapedText}\`;`);
-		lines.push('</\\/script>');
+		lines.push('<\/script>');
 		lines.push('');
 		lines.push('<AsciiArt');
 		if (bindSvg) lines.push('  bind:svg');
 		lines.push('  {text}');
-		lines.push(`  rows={${rows}}`);
-		lines.push(`  cols={${cols}}`);
-		if (cellAspect !== 0.6) lines.push(`  cellAspect={${cellAspect}}`);
+		lines.push(`  rows={${fmt(rows)}}`);
+		lines.push(`  cols={${fmt(cols)}}`);
+		if (cellAspect !== 0.6) lines.push(`  cellAspect={${fmt(cellAspect)}}`);
 		if (showGrid) lines.push('  grid');
 		if (frame) lines.push('  frame');
 		if (marginProp) lines.push(marginProp.slice(1));
@@ -208,15 +216,15 @@
 			if (showGrid) {
 				lines.push('  :global(.ascii-grid) {');
 				lines.push(`    stroke: ${gridStroke};`);
-				lines.push(`    stroke-width: ${gridStrokeWidth};`);
-				lines.push(`    opacity: ${gridOpacity};`);
+				lines.push(`    stroke-width: ${fmt(gridStrokeWidth)};`);
+				lines.push(`    opacity: ${fmt(gridOpacity)};`);
 				if (gridDashArray !== 'none') lines.push(`    stroke-dasharray: ${gridDashArray};`);
 				lines.push('  }');
 			}
 			if (frame) {
 				lines.push('  :global(.ascii-frame) {');
 				lines.push(`    stroke: ${frameStroke};`);
-				lines.push(`    stroke-width: ${frameStrokeWidth};`);
+				lines.push(`    stroke-width: ${fmt(frameStrokeWidth)};`);
 				if (frameDashArray !== 'none') lines.push(`    stroke-dasharray: ${frameDashArray};`);
 				lines.push('  }');
 			}
