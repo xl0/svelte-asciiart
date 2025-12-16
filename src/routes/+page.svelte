@@ -299,7 +299,10 @@
 </script>
 
 <div class="mx-auto max-w-6xl p-6">
-	<h1 class="mb-6 text-3xl font-bold">AsciiArt Demo</h1>
+	<div class="mb-6 flex items-center justify-between gap-4">
+		<h1 class="text-3xl font-bold">AsciiArt Demo</h1>
+		<Button variant="outline" href="https://github.com/xl0/svelte-asciiart">GitHub</Button>
+	</div>
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<Card.Root>
