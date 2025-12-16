@@ -48,12 +48,16 @@
 
 	// Derive rows/cols from text if not provided
 	const lines = $derived(text.split('\n'));
-	const derivedRows = $derived(rows ?? lines.length);
-	const derivedCols = $derived(cols ?? Math.max(0, ...lines.map((l) => l.length)));
+	const contentRows = $derived(lines.length);
+	const contentCols = $derived(Math.max(0, ...lines.map((l) => l.length)));
+	const frameRows = $derived(rows ?? contentRows);
+	const frameCols = $derived(cols ?? contentCols);
+	const renderRows = $derived(Math.max(frameRows, contentRows));
+	const renderCols = $derived(Math.max(frameCols, contentCols));
 
-	const paddedLines = $derived(lines.map((l) => l.padEnd(derivedCols, ' ')).slice(0, derivedRows));
-	const gridRows = $derived(Array.from({ length: derivedRows }, (_, r) => r));
-	const gridCols = $derived(Array.from({ length: derivedCols }, (_, c) => c));
+	const paddedLines = $derived(lines.map((l) => l.padEnd(renderCols, ' ')).slice(0, renderRows));
+	const gridRows = $derived(Array.from({ length: renderRows }, (_, r) => r));
+	const gridCols = $derived(Array.from({ length: renderCols }, (_, c) => c));
 	const charAt = (r: number, c: number) => (paddedLines[r] ?? '').charAt(c) || ' ';
 
 	// Character dimensions for monospace font (approximate ratio)
@@ -62,9 +66,9 @@
 	const defaultFontStack =
 		'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
-	// Calculate viewBox dimensions (include margin for grid mode)
-	const totalCols = $derived(derivedCols + parsedMargin.left + parsedMargin.right);
-	const totalRows = $derived(derivedRows + parsedMargin.top + parsedMargin.bottom);
+	// Calculate viewBox dimensions (frame + margin). Content may overflow the frame into the margin.
+	const totalCols = $derived(frameCols + parsedMargin.left + parsedMargin.right);
+	const totalRows = $derived(frameRows + parsedMargin.top + parsedMargin.bottom);
 	const viewBoxWidth = $derived(totalCols * cellAspect);
 	const viewBoxHeight = $derived(totalRows * cellHeight);
 	const totalGridCols = $derived(Array.from({ length: totalCols + 1 }, (_, c) => c));
@@ -81,6 +85,7 @@
 	bind:this={svg}
 	{...rest}
 	{viewBox}
+	overflow="hidden"
 	preserveAspectRatio="xMinYMin meet"
 	xmlns="http://www.w3.org/2000/svg"
 	style="width: 100%; height: 100%; font-family: var(--ascii-font-family, {defaultFontStack});"
@@ -101,8 +106,8 @@
 			class={frameClass}
 			x={fmt(offsetX)}
 			y={fmt(offsetY)}
-			width={fmt(derivedCols * cellAspect)}
-			height={fmt(derivedRows * cellHeight)}
+			width={fmt(frameCols * cellAspect)}
+			height={fmt(frameRows * cellHeight)}
 			fill="none"
 		/>
 	{/if}

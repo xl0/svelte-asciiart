@@ -43,6 +43,16 @@ describe('AsciiArt', () => {
 		expect(viewBox).toBe('0 0 12 10');
 	});
 
+	it('text may overflow the frame into the margin but is clipped at viewBox', () => {
+		const { container } = render(AsciiArt, {
+			props: { text: 'ABCDE', rows: 1, cols: 2, margin: 1, frame: true }
+		});
+		const svg = container.querySelector('svg');
+		expect(svg?.getAttribute('viewBox')).toBe('0 0 2.4 3');
+		const tspans = Array.from(container.querySelectorAll('tspan'));
+		expect(tspans.length).toBe(5);
+	});
+
 	it('uses CSS variable for font family', () => {
 		const { container } = render(AsciiArt, { props: { text: 'Test' } });
 		const svg = container.querySelector('svg');
