@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Slider } from '$lib/components/ui/slider';
 	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
 	import { Check, Copy } from '@lucide/svelte';
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
@@ -68,6 +69,7 @@
 	let showGrid = $state(true);
 	let rows = $state(4);
 	let cols = $state(22);
+	let cellAspect = $state(0.6);
 	let marginTop = $state(1);
 	let marginRight = $state(2);
 	let marginBottom = $state(1);
@@ -82,6 +84,10 @@
 	let frameStrokeWidth = $state(0.05);
 	let frameLineStyle = $state('solid');
 	let gridLineStyle = $state('solid');
+	let bindSvg = $state(false);
+	let svg = $state<SVGSVGElement | null>(null);
+	let copiedSvg = $state(false);
+	let copiedSvgTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [
 		number,
@@ -93,46 +99,31 @@
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
 
-	const gridStyle = $derived(
-		showGrid
-			? `stroke: ${gridStroke}; stroke-width: ${gridStrokeWidth}; opacity: ${gridOpacity}; stroke-dasharray: ${gridDashArray};`
-			: 'display: none;'
-	);
-	const frameStyle = $derived(
-		`stroke: ${frameStroke}; stroke-width: ${frameStrokeWidth}; stroke-dasharray: ${frameDashArray};`
-	);
-
-	function buildGridCss(): string {
-		const props: string[] = [];
-		props.push(`stroke: ${gridStroke}`);
-		props.push(`stroke-width: ${gridStrokeWidth}`);
-		props.push(`opacity: ${gridOpacity}`);
-		if (gridDashArray !== 'none') props.push(`stroke-dasharray: ${gridDashArray}`);
-		if (!showGrid) props.push('display: none');
-		return props.join(';\n\t\t');
-	}
-
-	function buildFrameCss(): string {
-		const props: string[] = [];
-		props.push(`stroke: ${frameStroke}`);
-		props.push(`stroke-width: ${frameStrokeWidth}`);
-		if (frameDashArray !== 'none') props.push(`stroke-dasharray: ${frameDashArray}`);
-		return props.join(';\n\t\t');
-	}
-
 	function buildMarginProp(): string {
 		const hasMargin = marginTop > 0 || marginRight > 0 || marginBottom > 0 || marginLeft > 0;
 		if (!hasMargin) return '';
 		if (marginTop === marginBottom && marginLeft === marginRight) {
-			if (marginTop === marginLeft) return `\n  frameMargin={${marginTop}}`;
-			return `\n  frameMargin={[${marginTop}, ${marginLeft}]}`;
+			if (marginTop === marginLeft) return `\n  margin={${marginTop}}`;
+			return `\n  margin={[${marginTop}, ${marginLeft}]}`;
 		}
-		return `\n  frameMargin={[${marginTop}, ${marginRight}, ${marginBottom}, ${marginLeft}]}`;
+		return `\n  margin={[${marginTop}, ${marginRight}, ${marginBottom}, ${marginLeft}]}`;
 	}
 
 	function buildClassProp(): string {
 		if (fontKey === defaultFontKey) return '';
 		return `\n  class="ascii-font-${fontKey}"`;
+	}
+
+	function buildWrapperStyle(): string {
+		const props: string[] = [];
+		props.push(`--ascii-grid-stroke: ${gridStroke}`);
+		props.push(`--ascii-grid-stroke-width: ${gridStrokeWidth}`);
+		props.push(`--ascii-grid-opacity: ${gridOpacity}`);
+		props.push(`--ascii-grid-dasharray: ${gridDashArray}`);
+		props.push(`--ascii-frame-stroke: ${frameStroke}`);
+		props.push(`--ascii-frame-stroke-width: ${frameStrokeWidth}`);
+		props.push(`--ascii-frame-dasharray: ${frameDashArray}`);
+		return props.join('; ');
 	}
 
 	function buildFontCss(): string {
@@ -183,32 +174,50 @@
 			lines.push('');
 		}
 		lines.push('<script>');
+		if (bindSvg) {
+			lines.push('  let svg = $state<SVGSVGElement>();');
+		}
 		lines.push(`  const text = \`${escapedText}\`;`);
 		lines.push('</\\/script>');
 		lines.push('');
 		lines.push('<AsciiArt');
+		if (bindSvg) lines.push('  bind:svg');
 		lines.push('  {text}');
 		lines.push(`  rows={${rows}}`);
 		lines.push(`  cols={${cols}}`);
-		lines.push('  grid');
+		if (cellAspect !== 0.6) lines.push(`  cellAspect={${cellAspect}}`);
+		if (showGrid) lines.push('  grid');
 		if (frame) lines.push('  frame');
 		if (marginProp) lines.push(marginProp.slice(1));
 		if (classProp) lines.push(classProp.slice(1));
 		if (showGrid) lines.push('  gridClass="ascii-grid"');
 		if (frame) lines.push('  frameClass="ascii-frame"');
 		lines.push('/>');
+		if (bindSvg) {
+			lines.push('');
+			lines.push('{#if svg}');
+			lines.push(
+				'  <button type="button" on:click={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
+			);
+			lines.push('{/if}');
+		}
 		lines.push('');
 		if (showGrid || frame || fontCss) {
 			lines.push('<style>');
 			if (fontCss) lines.push(`  ${fontCss.replaceAll('\n', '\n  ')}`);
 			if (showGrid) {
-				lines.push('  .ascii-grid {');
-				lines.push(`    ${buildGridCss()};`);
+				lines.push('  :global(.ascii-grid) {');
+				lines.push(`    stroke: ${gridStroke};`);
+				lines.push(`    stroke-width: ${gridStrokeWidth};`);
+				lines.push(`    opacity: ${gridOpacity};`);
+				if (gridDashArray !== 'none') lines.push(`    stroke-dasharray: ${gridDashArray};`);
 				lines.push('  }');
 			}
 			if (frame) {
-				lines.push('  .ascii-frame {');
-				lines.push(`    ${buildFrameCss()};`);
+				lines.push('  :global(.ascii-frame) {');
+				lines.push(`    stroke: ${frameStroke};`);
+				lines.push(`    stroke-width: ${frameStrokeWidth};`);
+				if (frameDashArray !== 'none') lines.push(`    stroke-dasharray: ${frameDashArray};`);
 				lines.push('  }');
 			}
 			lines.push('</style>');
@@ -234,6 +243,28 @@
 	let exampleCodeEl: HTMLDivElement | null = null;
 	let copied = $state(false);
 	let copiedTimeout: ReturnType<typeof setTimeout> | undefined;
+
+	async function copySvg() {
+		if (!svg) return;
+		const markup = svg.outerHTML;
+		try {
+			await navigator.clipboard.writeText(markup);
+		} catch {
+			const ta = document.createElement('textarea');
+			ta.value = markup;
+			ta.style.position = 'fixed';
+			ta.style.left = '-99999px';
+			document.body.append(ta);
+			ta.select();
+			document.execCommand('copy');
+			ta.remove();
+		}
+		copiedSvg = true;
+		if (copiedSvgTimeout) clearTimeout(copiedSvgTimeout);
+		copiedSvgTimeout = setTimeout(() => {
+			copiedSvg = false;
+		}, 800);
+	}
 
 	async function copyExampleCode() {
 		try {
@@ -278,7 +309,7 @@
 					<Textarea id="ascii-input" bind:value={text} rows={6} class="font-mono text-sm" />
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-4 gap-4">
 					<div class="flex items-center gap-2">
 						<Switch id="grid-toggle" bind:checked={showGrid} />
 						<Label for="grid-toggle">Show Grid</Label>
@@ -287,6 +318,22 @@
 						<Switch id="frame-toggle" bind:checked={frame} />
 						<Label for="frame-toggle">Frame</Label>
 					</div>
+					<div class="flex items-center gap-2">
+						<Switch id="bind-svg-toggle" bind:checked={bindSvg} />
+						<Label for="bind-svg-toggle">Bind SVG</Label>
+					</div>
+					<div class="flex flex-wrap gap-2">
+						{#if bindSvg}
+							<Button variant="outline" onclick={copySvg} disabled={!svg}>
+								{copiedSvg ? 'Copied' : 'Copy SVG'}
+							</Button>
+						{/if}
+					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
+					<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
 				</div>
 
 				<div class="space-y-2">
@@ -413,16 +460,21 @@
 		</Card.Root>
 
 		<div class="space-y-6">
-			<div class="w-full resize overflow-auto rounded-sm border border-border bg-card">
+			<div
+				class="w-full resize overflow-auto rounded-sm border border-border bg-card"
+				style={buildWrapperStyle()}
+			>
 				<AsciiArt
+					bind:svg
 					{text}
 					{rows}
 					{cols}
-					grid
+					grid={showGrid}
+					{cellAspect}
 					{frame}
-					{frameMargin}
-					{gridStyle}
-					{frameStyle}
+					margin={frameMargin}
+					gridClass={showGrid ? 'ascii-grid' : ''}
+					frameClass={frame ? 'ascii-frame' : ''}
 					class={fontKey !== 'system' ? `ascii-font-${fontKey}` : ''}
 				/>
 			</div>
@@ -466,3 +518,19 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	:global(.ascii-grid) {
+		stroke: var(--ascii-grid-stroke);
+		stroke-width: var(--ascii-grid-stroke-width);
+		opacity: var(--ascii-grid-opacity);
+		stroke-dasharray: var(--ascii-grid-dasharray);
+		fill: none;
+	}
+	:global(.ascii-frame) {
+		stroke: var(--ascii-frame-stroke);
+		stroke-width: var(--ascii-frame-stroke-width);
+		stroke-dasharray: var(--ascii-frame-dasharray);
+		fill: none;
+	}
+</style>

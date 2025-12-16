@@ -12,16 +12,16 @@ describe('AsciiArt', () => {
 	it('renders text content', () => {
 		const { container } = render(AsciiArt, { props: { text: 'Hello\nWorld' } });
 		const tspans = container.querySelectorAll('tspan');
-		expect(tspans.length).toBe(2);
-		expect(tspans[0].textContent).toBe('Hello');
-		expect(tspans[1].textContent).toBe('World');
+		expect(tspans.length).toBe(10);
+		expect(tspans[0].textContent).toBe('H');
+		expect(tspans[5].textContent).toBe('W');
 	});
 
 	it('derives rows from text lines', () => {
 		const text = 'Line1\nLine2\nLine3';
 		const { container } = render(AsciiArt, { props: { text } });
 		const tspans = container.querySelectorAll('tspan');
-		expect(tspans.length).toBe(3);
+		expect(tspans.length).toBe(15);
 	});
 
 	it('calculates viewBox based on text dimensions', () => {
@@ -29,8 +29,8 @@ describe('AsciiArt', () => {
 		const { container } = render(AsciiArt, { props: { text } });
 		const svg = container.querySelector('svg');
 		const viewBox = svg?.getAttribute('viewBox');
-		// 5 cols * 0.6 = 3, 2 rows * 1.2 = 2.4
-		expect(viewBox).toBe('0 0 3 2.4');
+		// 5 cols * 0.6 = 3, 2 rows * 1 = 2
+		expect(viewBox).toBe('0 0 3 2');
 	});
 
 	it('allows overriding rows and cols', () => {
@@ -39,16 +39,14 @@ describe('AsciiArt', () => {
 		});
 		const svg = container.querySelector('svg');
 		const viewBox = svg?.getAttribute('viewBox');
-		// 20 cols * 0.6 = 12, 10 rows * 1.2 = 12
-		expect(viewBox).toBe('0 0 12 12');
+		// 20 cols * 0.6 = 12, 10 rows * 1 = 10
+		expect(viewBox).toBe('0 0 12 10');
 	});
 
-	it('uses custom font family', () => {
-		const { container } = render(AsciiArt, {
-			props: { text: 'Test', fontFamily: 'Courier New' }
-		});
-		const textEl = container.querySelector('text');
-		expect(textEl?.getAttribute('font-family')).toBe('Courier New');
+	it('uses CSS variable for font family', () => {
+		const { container } = render(AsciiArt, { props: { text: 'Test' } });
+		const svg = container.querySelector('svg');
+		expect(svg?.getAttribute('style')).toContain('font-family: var(--ascii-font-family');
 	});
 
 	it('handles empty text', () => {
@@ -60,8 +58,12 @@ describe('AsciiArt', () => {
 	it('handles single line text', () => {
 		const { container } = render(AsciiArt, { props: { text: 'Single line' } });
 		const tspans = container.querySelectorAll('tspan');
-		expect(tspans.length).toBe(1);
-		expect(tspans[0].textContent).toBe('Single line');
+		expect(tspans.length).toBe(11);
+		expect(
+			Array.from(tspans)
+				.map((t) => t.textContent)
+				.join('')
+		).toBe('Single line');
 	});
 
 	it('grid mode uses rows/cols as viewBox units', () => {
@@ -87,6 +89,14 @@ describe('AsciiArt', () => {
 		});
 		const path = container.querySelector('path');
 		expect(path).toBeTruthy();
+	});
+
+	it('non-grid mode does not draw a grid path', () => {
+		const { container } = render(AsciiArt, {
+			props: { text: 'A', rows: 2, cols: 2, grid: false }
+		});
+		const path = container.querySelector('path');
+		expect(path).toBeFalsy();
 	});
 
 	it('grid mode renders one <text> per line with tspans per character', () => {
