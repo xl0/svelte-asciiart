@@ -8,8 +8,14 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), devtoolsJson()],
 	server: {
 		fs: {
-			allow: [path.resolve('packages/svelte-asciiart/dist')]
+			allow: [
+				path.resolve('packages/svelte-asciiart/dist'),
+				path.resolve('packages/svelte-asciiart/src')
+			]
 		}
+	},
+	ssr: {
+		noExternal: ['svelte-asciiart']
 	},
 	test: {
 		include: ['src/**/*.{test,spec}.{js,ts}'],
@@ -19,6 +25,9 @@ export default defineConfig({
 		}
 	},
 	resolve: {
+		alias: {
+			'svelte-asciiart': path.resolve('packages/svelte-asciiart/src/lib/index.ts')
+		},
 		conditions: ['browser']
 	}
 });
