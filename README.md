@@ -27,28 +27,26 @@ npm install svelte-asciiart
 
 ## Props
 
-| Prop                | Type                                                             | Default              | Description                                      |
-| ------------------- | ---------------------------------------------------------------- | -------------------- | ------------------------------------------------ |
-| `text`              | `string`                                                         | required             | The ASCII art text to render                     |
-| `rows`              | `number`                                                         | auto                 | Number of rows (derived from text if not set)    |
-| `cols`              | `number`                                                         | auto                 | Number of columns (derived from text if not set) |
-| `grid`              | `boolean`                                                        | `false`              | Enable grid mode with cell-based layout          |
-| `cellAspect`        | `number`                                                         | `0.6`                | Width/height ratio of grid cells                 |
-| `measureCellAspect` | `boolean`                                                        | `false`              | Measure actual font aspect ratio                 |
-| `gridClass`         | `string`                                                         | `''`                 | CSS class for grid lines                         |
-| `gridStyle`         | `string`                                                         | `''`                 | Inline styles for grid lines                     |
-| `fontFamily`        | `string`                                                         | `'Courier New', ...` | Font family for text                             |
-| `frame`             | `boolean`                                                        | `false`              | Show frame around content (grid mode only)       |
-| `frameMargin`       | `number \| [number, number] \| [number, number, number, number]` | `0`                  | Margin around frame in grid cells                |
-| `frameClass`        | `string`                                                         | `''`                 | CSS class for frame                              |
-| `frameStyle`        | `string`                                                         | `''`                 | Inline styles for frame                          |
+| Prop         | Type                                                             | Default  | Description                                                   |
+| ------------ | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------- |
+| `text`       | `string`                                                         | required | The ASCII art text to render                                  |
+| `rows`       | `number`                                                         | auto     | Frame rows (content can overflow into the margin)             |
+| `cols`       | `number`                                                         | auto     | Frame columns (content can overflow into the margin)          |
+| `grid`       | `boolean`                                                        | `false`  | Draw grid lines for the full viewBox (frame + margin)         |
+| `cellAspect` | `number`                                                         | `0.6`    | Character cell width/height ratio                             |
+| `gridClass`  | `string`                                                         | `''`     | CSS class for the grid lines `<path>`                         |
+| `frame`      | `boolean`                                                        | `false`  | Draw a frame `<rect>` around the frame area                   |
+| `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`      | Margin around the frame in grid cells (top/right/bottom/left) |
+| `frameClass` | `string`                                                         | `''`     | CSS class for the frame `<rect>`                              |
+| `svg`        | `SVGSVGElement \| null`                                          | bindable | Optionally bind the underlying `<svg>` element                |
+| `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -        | All other SVG attributes are forwarded to the `<svg>` element |
 
 ## Grid Mode
 
 Grid mode renders text character-by-character in a precise grid, useful for ASCII art that needs exact alignment:
 
 ```svelte
-<AsciiArt {text} grid frame frameMargin={[1, 2]} gridClass="ascii-grid" frameClass="ascii-frame" />
+<AsciiArt {text} grid frame margin={[1, 2]} gridClass="ascii-grid" frameClass="ascii-frame" />
 
 <style>
 	.ascii-grid {

@@ -2,6 +2,7 @@
 	"name": "svelte-asciiart-demo",
 	"private": true,
 	"version": "0.0.1",
+	"readme": "../../README.md",
 	"workspaces": [
 		"packages/*"
 	],
