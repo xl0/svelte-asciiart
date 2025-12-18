@@ -84,7 +84,6 @@
 	let marginBottom = $state(1);
 	let marginLeft = $state(2);
 	let fontKey = $state<(typeof monoFonts)[number]['key']>(defaultFontKey);
-	const fontClass = $derived(`ascii-font-${fontKey}`);
 
 	let gridStroke = $state('#87CEFA');
 	let gridStrokeWidth = $state(0.03);
