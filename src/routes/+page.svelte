@@ -102,6 +102,9 @@
 	let strokeColor = $state('#111827');
 	let strokeWidth = $state(0);
 	let bold = $state(false);
+	const fontFamily = $derived(
+		monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family
+	);
 
 	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [
 		number,
@@ -150,6 +153,8 @@
 		props.push(`--ascii-frame-stroke-width: ${frameStrokeWidth}`);
 		props.push(`--ascii-frame-dasharray: ${frameDashArray}`);
 		props.push(`background: ${bgColor}`);
+		props.push(`--ascii-font-family: ${fontFamily}`);
+		props.push(`--ascii-font-weight: ${bold ? 700 : 400}`);
 		props.push(`--ascii-text-fill: ${fillColor}`);
 		props.push(`--ascii-text-stroke: ${strokeColor}`);
 		props.push(`--ascii-text-stroke-width: ${strokeWidth}`);
@@ -605,7 +610,7 @@
 
 		<div class="mr-auto w-2xl space-y-6">
 			<div
-				class="w-full resize overflow-auto rounded-sm border border-border"
+				class="ascii-surface w-full resize overflow-auto rounded-sm border border-border"
 				style={buildWrapperStyle()}
 			>
 				<AsciiArt
@@ -618,14 +623,6 @@
 					margin={frameMargin}
 					gridClass={showGrid ? 'ascii-grid' : ''}
 					frameClass={frame ? 'ascii-frame' : ''}
-					class={[
-						fontKey !== 'system' ? `ascii-font-${fontKey}` : '',
-						bold ? 'ascii-bold' : '',
-						'ascii-paint',
-						'ascii-bg'
-					]
-						.filter(Boolean)
-						.join(' ')}
 				/>
 			</div>
 
@@ -683,15 +680,12 @@
 		stroke-dasharray: var(--ascii-frame-dasharray);
 		fill: none;
 	}
-	:global(svg.ascii-paint text),
-	:global(svg.ascii-paint tspan) {
+	:global(.ascii-surface svg text),
+	:global(.ascii-surface svg tspan) {
 		fill: var(--ascii-text-fill, currentColor);
 		stroke: var(--ascii-text-stroke, none);
 		stroke-width: var(--ascii-text-stroke-width, 0);
+		font-weight: var(--ascii-font-weight, 400);
 		paint-order: stroke fill;
-	}
-	:global(svg.ascii-bold text),
-	:global(svg.ascii-bold tspan) {
-		font-weight: 700;
 	}
 </style>
