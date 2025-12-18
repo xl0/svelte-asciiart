@@ -74,8 +74,10 @@
 	let text = $state(defaultArt);
 	let frame = $state(true);
 	let showGrid = $state(true);
-	let rows = $state(4);
-	let cols = $state(22);
+	let autoRows = $state(false);
+	let autoCols = $state(false);
+	let rows = $state<number>(4);
+	let cols = $state<number>(22);
 	let cellAspect = $state(0.6);
 	let marginTop = $state(1);
 	let marginRight = $state(2);
@@ -95,6 +97,11 @@
 	let svg = $state<SVGSVGElement | null>(null);
 	let copiedSvg = $state(false);
 	let copiedSvgTimeout: ReturnType<typeof setTimeout> | undefined;
+	let bgColor = $state('#f3f4f6');
+	let fillColor = $state('#111827');
+	let strokeColor = $state('#111827');
+	let strokeWidth = $state(0);
+	let bold = $state(false);
 
 	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [
 		number,
@@ -102,6 +109,13 @@
 		number,
 		number
 	]);
+
+	const rowsProp = $derived(!autoRows && Number.isFinite(rows) ? rows : undefined);
+	const colsProp = $derived(!autoCols && Number.isFinite(cols) ? cols : undefined);
+	const sizeProps = $derived({
+		...(rowsProp === undefined ? {} : { rows: rowsProp }),
+		...(colsProp === undefined ? {} : { cols: colsProp })
+	});
 
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
@@ -117,8 +131,13 @@
 	}
 
 	function buildClassProp(): string {
-		if (fontKey === defaultFontKey) return '';
-		return `\n  class="ascii-font-${fontKey}"`;
+		const classes: string[] = [];
+		if (fontKey !== defaultFontKey) classes.push(`ascii-font-${fontKey}`);
+		if (bold) classes.push('ascii-bold');
+		if (hasCustomBg()) classes.push('ascii-bg');
+		if (hasCustomPaint()) classes.push('ascii-paint');
+		if (!classes.length) return '';
+		return `\n  class="${classes.join(' ')}"`;
 	}
 
 	function buildWrapperStyle(): string {
@@ -130,7 +149,19 @@
 		props.push(`--ascii-frame-stroke: ${frameStroke}`);
 		props.push(`--ascii-frame-stroke-width: ${frameStrokeWidth}`);
 		props.push(`--ascii-frame-dasharray: ${frameDashArray}`);
+		props.push(`background: ${bgColor}`);
+		props.push(`--ascii-text-fill: ${fillColor}`);
+		props.push(`--ascii-text-stroke: ${strokeColor}`);
+		props.push(`--ascii-text-stroke-width: ${strokeWidth}`);
 		return props.join('; ');
+	}
+
+	function hasCustomBg(): boolean {
+		return bgColor !== '#f3f4f6';
+	}
+
+	function hasCustomPaint(): boolean {
+		return fillColor !== '#111827' || strokeColor !== '#111827' || strokeWidth !== 0;
 	}
 
 	function buildFontCss(): string {
@@ -180,7 +211,7 @@
 			lines.push(fontHead);
 			lines.push('');
 		}
-		lines.push('<script>');
+		lines.push('<script lang="ts">');
 		lines.push("  import { AsciiArt } from 'svelte-asciiart';");
 		if (bindSvg) {
 			lines.push('  let svg = $state<SVGSVGElement>();');
@@ -191,8 +222,8 @@
 		lines.push('<AsciiArt');
 		if (bindSvg) lines.push('  bind:svg');
 		lines.push('  {text}');
-		lines.push(`  rows={${fmt(rows)}}`);
-		lines.push(`  cols={${fmt(cols)}}`);
+		if (rowsProp !== undefined) lines.push(`  rows={${fmt(rowsProp)}}`);
+		if (colsProp !== undefined) lines.push(`  cols={${fmt(colsProp)}}`);
 		if (cellAspect !== 0.6) lines.push(`  cellAspect={${fmt(cellAspect)}}`);
 		if (showGrid) lines.push('  grid');
 		if (frame) lines.push('  frame');
@@ -205,14 +236,33 @@
 			lines.push('');
 			lines.push('{#if svg}');
 			lines.push(
-				'  <button type="button" on:click={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
+				'  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
 			);
 			lines.push('{/if}');
 		}
 		lines.push('');
-		if (showGrid || frame || fontCss) {
+		if (showGrid || frame || fontCss || bold || hasCustomBg() || hasCustomPaint()) {
 			lines.push('<style>');
 			if (fontCss) lines.push(`  ${fontCss.replaceAll('\n', '\n  ')}`);
+			if (bold) {
+				lines.push('  :global(.ascii-bold) {');
+				lines.push('    font-weight: 700;');
+				lines.push('  }');
+			}
+			if (hasCustomBg()) {
+				lines.push('  :global(.ascii-bg) {');
+				lines.push(`    background: ${bgColor};`);
+				lines.push('  }');
+			}
+			if (hasCustomPaint()) {
+				lines.push('  :global(svg.ascii-paint text),');
+				lines.push('  :global(svg.ascii-paint tspan) {');
+				lines.push(`    fill: ${fillColor};`);
+				lines.push(`    stroke: ${strokeColor};`);
+				lines.push(`    stroke-width: ${fmt(strokeWidth)};`);
+				lines.push('    paint-order: stroke fill;');
+				lines.push('  }');
+			}
 			if (showGrid) {
 				lines.push('  :global(.ascii-grid) {');
 				lines.push(`    stroke: ${gridStroke};`);
@@ -306,18 +356,23 @@
 	}
 </script>
 
-<div class="mx-auto max-w-6xl p-6">
+<div class=" p-6">
 	<div class="mb-6 flex items-center justify-between gap-4">
 		<h1 class="text-3xl font-bold">AsciiArt Demo</h1>
 		<Button variant="outline" href="https://github.com/xl0/svelte-asciiart">GitHub</Button>
 	</div>
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<Card.Root>
-			<Card.Content class="space-y-6">
-				<div class="space-y-2">
+	<div class="grid grid-cols-2 gap-6">
+		<Card.Root class="ml-auto max-w-full">
+			<Card.Content class="max-w-full grow-0 space-y-6">
+				<div class="grow-1 space-y-2">
 					<Label for="ascii-input">ASCII Art</Label>
-					<Textarea id="ascii-input" bind:value={text} rows={6} class="font-mono text-sm" />
+					<Textarea
+						id="ascii-input"
+						bind:value={text}
+						rows={6}
+						class="overflow-x-scroll overflow-y-auto font-mono text-sm whitespace-nowrap"
+					/>
 				</div>
 
 				<div class="grid grid-cols-4 gap-4">
@@ -347,28 +402,106 @@
 					<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
 				</div>
 
-				<div class="space-y-2">
-					<Label class="text-sm font-medium">Font</Label>
-					<Select.Root type="single" bind:value={fontKey}>
-						<Select.Trigger class="w-full">
-							{monoFonts.find((f) => f.key === fontKey)?.label ?? 'System'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each monoFonts as f}
-								<Select.Item value={f.key}>{f.label}</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
+				<div class="space-y-4">
+					<Label class="text-sm font-medium">Canvas Size</Label>
+					<div class="grid grid-cols-2 gap-4">
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<Label class="text-xs text-muted-foreground" for="rows-enabled">Rows</Label>
+								<div class="flex items-center gap-2">
+									<Switch id="rows-enabled" bind:checked={autoRows} />
+									<Label for="rows-enabled" class="text-xs text-muted-foreground">Auto</Label>
+								</div>
+							</div>
+							<Input
+								type="number"
+								inputmode="numeric"
+								step="any"
+								value={String(rows)}
+								oninput={(e) => {
+									const s = (e.currentTarget as HTMLInputElement).value;
+									const v = s.trim() === '' ? Number.NaN : Number(s);
+									rows = v;
+								}}
+								disabled={autoRows}
+							/>
+						</div>
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<Label class="text-xs text-muted-foreground" for="cols-enabled">Cols</Label>
+								<div class="flex items-center gap-2">
+									<Switch id="cols-enabled" bind:checked={autoCols} />
+									<Label for="cols-enabled" class="text-xs text-muted-foreground">Auto</Label>
+								</div>
+							</div>
+							<Input
+								type="number"
+								inputmode="numeric"
+								step="any"
+								value={String(cols)}
+								oninput={(e) => {
+									const s = (e.currentTarget as HTMLInputElement).value;
+									const v = s.trim() === '' ? Number.NaN : Number(s);
+									cols = v;
+								}}
+								disabled={autoCols}
+							/>
+						</div>
+					</div>
 				</div>
 
-				<div class="space-y-4">
-					<div class="space-y-2">
-						<Label>Rows: {rows}</Label>
-						<Slider type="single" bind:value={rows} min={1} max={20} step={1} />
-					</div>
-					<div class="space-y-2">
-						<Label>Cols: {cols}</Label>
-						<Slider type="single" bind:value={cols} min={1} max={30} step={1} />
+				<div class="space-y-2">
+					<Label class="text-sm font-medium">Font</Label>
+					<div class="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-end gap-3">
+						<div class="space-y-2">
+							<Select.Root type="single" bind:value={fontKey}>
+								<Select.Trigger class="w-full">
+									{monoFonts.find((f) => f.key === fontKey)?.label ?? 'System'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each monoFonts as f}
+										<Select.Item value={f.key}>{f.label}</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground" for="bold-toggle">Bold</Label>
+							<div class="flex h-9 items-center">
+								<Switch id="bold-toggle" bind:checked={bold} />
+							</div>
+						</div>
+
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground">Fill</Label>
+							<Input type="color" bind:value={fillColor} class="h-9 w-12 p-0" />
+						</div>
+
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground">Stroke</Label>
+							<Input type="color" bind:value={strokeColor} class="h-9 w-12 p-0" />
+						</div>
+
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground">W</Label>
+							<Input
+								type="number"
+								min={0}
+								step={0.1}
+								value={String(strokeWidth)}
+								oninput={(e) => {
+									const s = (e.currentTarget as HTMLInputElement).value;
+									strokeWidth = s.trim() === '' ? 0 : Number(s);
+								}}
+								class="h-9 w-20"
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground">BG</Label>
+							<Input type="color" bind:value={bgColor} class="h-9 w-12 p-0" />
+						</div>
 					</div>
 				</div>
 
@@ -470,23 +603,29 @@
 			</Card.Content>
 		</Card.Root>
 
-		<div class="space-y-6">
+		<div class="mr-auto w-2xl space-y-6">
 			<div
-				class="w-full resize overflow-auto rounded-sm border border-border bg-card"
+				class="w-full resize overflow-auto rounded-sm border border-border"
 				style={buildWrapperStyle()}
 			>
 				<AsciiArt
 					bind:svg
 					{text}
-					{rows}
-					{cols}
+					{...sizeProps}
 					grid={showGrid}
 					{cellAspect}
 					{frame}
 					margin={frameMargin}
 					gridClass={showGrid ? 'ascii-grid' : ''}
 					frameClass={frame ? 'ascii-frame' : ''}
-					class={fontKey !== 'system' ? `ascii-font-${fontKey}` : ''}
+					class={[
+						fontKey !== 'system' ? `ascii-font-${fontKey}` : '',
+						bold ? 'ascii-bold' : '',
+						'ascii-paint',
+						'ascii-bg'
+					]
+						.filter(Boolean)
+						.join(' ')}
 				/>
 			</div>
 
@@ -543,5 +682,16 @@
 		stroke-width: var(--ascii-frame-stroke-width);
 		stroke-dasharray: var(--ascii-frame-dasharray);
 		fill: none;
+	}
+	:global(svg.ascii-paint text),
+	:global(svg.ascii-paint tspan) {
+		fill: var(--ascii-text-fill, currentColor);
+		stroke: var(--ascii-text-stroke, none);
+		stroke-width: var(--ascii-text-stroke-width, 0);
+		paint-order: stroke fill;
+	}
+	:global(svg.ascii-bold text),
+	:global(svg.ascii-bold tspan) {
+		font-weight: 700;
 	}
 </style>
