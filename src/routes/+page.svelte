@@ -364,7 +364,7 @@
 </script>
 
 <div class="p-6">
-	<div class="mx-auto mb-6 flex max-w-340 items-center justify-between gap-4">
+	<div class="mx-auto mb-6 flex max-w-5xl items-center justify-between gap-4">
 		<h1 class="text-xl font-bold">svelte-asciiart</h1>
 		<Button variant="outline" href="https://github.com/xl0/svelte-asciiart">GitHub</Button>
 	</div>
@@ -413,7 +413,7 @@
 					<div class="space-y-4">
 						<Label class="text-sm font-medium">Canvas Size</Label>
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<!-- <div class="space-y-2">
+							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-2">
 									<Label class="text-xs text-muted-foreground" for="rows-enabled">Rows</Label>
 									<div class="flex items-center gap-1.5">
@@ -437,7 +437,7 @@
 									}}
 									disabled={autoRows}
 								/>
-							</div> -->
+							</div>
 							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-2">
 									<Label class="text-xs text-muted-foreground" for="cols-enabled">Cols</Label>
