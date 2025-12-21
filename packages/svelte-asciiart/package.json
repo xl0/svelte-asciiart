@@ -1,6 +1,6 @@
 {
 	"name": "svelte-asciiart",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -53,6 +53,18 @@
 		"vitest-browser-svelte": "^2.0.1"
 	},
 	"keywords": [
-		"svelte"
-	]
+		"svelte",
+		"ascii",
+		"art",
+		"ascii-art"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/svelte-asciiart.git",
+		"directory": "packages/svelte-asciiart"
+	},
+	"bugs": {
+		"url": "https://github.com/xl0/svelte-asciiart/issues"
+	},
+	"homepage": "https://github.com/xl0/svelte-asciiart#readme"
 }
