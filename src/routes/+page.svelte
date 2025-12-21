@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { AsciiArt } from 'svelte-asciiart';
+	import type { PageData } from './$types';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
@@ -10,6 +11,8 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import { codeToHtml } from 'shiki';
+
+	let { data }: { data: PageData } = $props();
 
 	const lineStyles = [
 		{ value: 'solid', label: 'Solid ———' },
@@ -360,254 +363,264 @@
 	}
 </script>
 
-<div class=" p-6">
-	<div class="mb-6 flex items-center justify-between gap-4">
-		<h1 class="text-3xl font-bold">AsciiArt Demo</h1>
+<div class="p-6">
+	<div class="mx-auto mb-6 flex max-w-340 items-center justify-between gap-4">
+		<h1 class="text-xl font-bold">svelte-asciiart</h1>
 		<Button variant="outline" href="https://github.com/xl0/svelte-asciiart">GitHub</Button>
 	</div>
 
-	<div class="grid grid-cols-2 gap-6">
-		<Card.Root class="ml-auto max-w-full">
-			<Card.Content class="max-w-full grow-0 space-y-6">
-				<div class="grow-1 space-y-2">
-					<Label for="ascii-input">ASCII Art</Label>
-					<Textarea
-						id="ascii-input"
-						bind:value={text}
-						rows={6}
-						class="overflow-x-scroll overflow-y-auto font-mono text-sm whitespace-nowrap"
-					/>
-				</div>
+	<div class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+		<div class="mx-auto flex h-full max-w-2xl flex-col xl:mr-0 xl:ml-auto">
+			<Card.Root class="flex h-full flex-col">
+				<Card.Content class="space-y-6">
+					<div class="grow space-y-2">
+						<Label for="ascii-input">ASCII Art</Label>
+						<Textarea
+							id="ascii-input"
+							bind:value={text}
+							rows={6}
+							class="overflow-x-scroll overflow-y-auto font-mono text-sm whitespace-nowrap"
+						/>
+					</div>
 
-				<div class="grid grid-cols-4 gap-4">
-					<div class="flex items-center gap-2">
-						<Switch id="grid-toggle" bind:checked={showGrid} />
-						<Label for="grid-toggle">Show Grid</Label>
-					</div>
-					<div class="flex items-center gap-2">
-						<Switch id="frame-toggle" bind:checked={frame} />
-						<Label for="frame-toggle">Frame</Label>
-					</div>
-					<div class="flex items-center gap-2">
-						<Switch id="bind-svg-toggle" bind:checked={bindSvg} />
-						<Label for="bind-svg-toggle">Bind SVG</Label>
-					</div>
-					<div class="flex flex-wrap gap-2">
-						{#if bindSvg}
-							<Button variant="outline" onclick={copySvg} disabled={!svg}>
-								{copiedSvg ? 'Copied' : 'Copy SVG'}
-							</Button>
-						{/if}
-					</div>
-				</div>
-
-				<div class="space-y-2">
-					<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
-					<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
-				</div>
-
-				<div class="space-y-4">
-					<Label class="text-sm font-medium">Canvas Size</Label>
-					<div class="grid grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label class="text-xs text-muted-foreground" for="rows-enabled">Rows</Label>
-								<div class="flex items-center gap-2">
-									<Switch id="rows-enabled" bind:checked={autoRows} />
-									<Label for="rows-enabled" class="text-xs text-muted-foreground">Auto</Label>
-								</div>
-							</div>
-							<Input
-								type="number"
-								inputmode="numeric"
-								step="any"
-								value={String(rows)}
-								oninput={(e) => {
-									const s = (e.currentTarget as HTMLInputElement).value;
-									const v = s.trim() === '' ? Number.NaN : Number(s);
-									rows = v;
-								}}
-								disabled={autoRows}
-							/>
+					<div class="flex flex-wrap gap-4">
+						<div class="flex min-w-fit items-center gap-2">
+							<Switch id="grid-toggle" bind:checked={showGrid} />
+							<Label for="grid-toggle" class="whitespace-nowrap">Show Grid</Label>
 						</div>
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label class="text-xs text-muted-foreground" for="cols-enabled">Cols</Label>
-								<div class="flex items-center gap-2">
-									<Switch id="cols-enabled" bind:checked={autoCols} />
-									<Label for="cols-enabled" class="text-xs text-muted-foreground">Auto</Label>
-								</div>
-							</div>
-							<Input
-								type="number"
-								inputmode="numeric"
-								step="any"
-								value={String(cols)}
-								oninput={(e) => {
-									const s = (e.currentTarget as HTMLInputElement).value;
-									const v = s.trim() === '' ? Number.NaN : Number(s);
-									cols = v;
-								}}
-								disabled={autoCols}
-							/>
+						<div class="flex min-w-fit items-center gap-2">
+							<Switch id="frame-toggle" bind:checked={frame} />
+							<Label for="frame-toggle" class="whitespace-nowrap">Frame</Label>
+						</div>
+						<div class="flex min-w-fit items-center gap-2">
+							<Switch id="bind-svg-toggle" bind:checked={bindSvg} />
+							<Label for="bind-svg-toggle" class="whitespace-nowrap">Bind SVG</Label>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							{#if bindSvg}
+								<Button variant="outline" onclick={copySvg} disabled={!svg} size="sm">
+									{copiedSvg ? 'Copied' : 'Copy SVG'}
+								</Button>
+							{/if}
 						</div>
 					</div>
-				</div>
 
-				<div class="space-y-2">
-					<Label class="text-sm font-medium">Font</Label>
-					<div class="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-end gap-3">
-						<div class="space-y-2">
-							<Select.Root type="single" bind:value={fontKey}>
-								<Select.Trigger class="w-full">
-									{monoFonts.find((f) => f.key === fontKey)?.label ?? 'System'}
-								</Select.Trigger>
-								<Select.Content>
-									{#each monoFonts as f}
-										<Select.Item value={f.key}>{f.label}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						</div>
-
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground" for="bold-toggle">Bold</Label>
-							<div class="flex h-9 items-center">
-								<Switch id="bold-toggle" bind:checked={bold} />
-							</div>
-						</div>
-
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Fill</Label>
-							<Input type="color" bind:value={fillColor} class="h-9 w-12 p-0" />
-						</div>
-
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Stroke</Label>
-							<Input type="color" bind:value={strokeColor} class="h-9 w-12 p-0" />
-						</div>
-
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">W</Label>
-							<Input
-								type="number"
-								min={0}
-								step={0.1}
-								value={String(strokeWidth)}
-								oninput={(e) => {
-									const s = (e.currentTarget as HTMLInputElement).value;
-									strokeWidth = s.trim() === '' ? 0 : Number(s);
-								}}
-								class="h-9 w-20"
-							/>
-						</div>
-
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">BG</Label>
-							<Input type="color" bind:value={bgColor} class="h-9 w-12 p-0" />
-						</div>
+					<div class="space-y-2">
+						<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
+						<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
 					</div>
-				</div>
 
-				<div class="space-y-4">
-					<Label class="text-sm font-medium">Margin</Label>
-					<div class="grid grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Top: {marginTop}</Label>
-							<Slider type="single" bind:value={marginTop} min={0} max={5} step={1} />
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Right: {marginRight}</Label>
-							<Slider type="single" bind:value={marginRight} min={0} max={5} step={1} />
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Bottom: {marginBottom}</Label>
-							<Slider type="single" bind:value={marginBottom} min={0} max={5} step={1} />
-						</div>
-						<div class="space-y-2">
-							<Label class="text-xs text-muted-foreground">Left: {marginLeft}</Label>
-							<Slider type="single" bind:value={marginLeft} min={0} max={5} step={1} />
-						</div>
-					</div>
-				</div>
-
-				{#if showGrid}
 					<div class="space-y-4">
-						<Label class="text-sm font-medium">Grid Style</Label>
-						<div class="grid grid-cols-2 gap-4">
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Color</Label>
-								<Input type="color" bind:value={gridStroke} class="h-9 w-full" />
-							</div>
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Line Style</Label>
-								<Select.Root type="single" bind:value={gridLineStyle}>
-									<Select.Trigger class="w-full">
-										{lineStyles.find((s) => s.value === gridLineStyle)?.label ?? 'Solid'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each lineStyles as style}
-											<Select.Item value={style.value}>{style.label}</Select.Item>
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Width: {gridStrokeWidth}</Label>
-								<Slider
-									type="single"
-									bind:value={gridStrokeWidth}
-									min={0.01}
-									max={0.1}
-									step={0.01}
+						<Label class="text-sm font-medium">Canvas Size</Label>
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<!-- <div class="space-y-2">
+								<div class="flex items-center justify-between gap-2">
+									<Label class="text-xs text-muted-foreground" for="rows-enabled">Rows</Label>
+									<div class="flex items-center gap-1.5">
+										<Switch id="rows-enabled" bind:checked={autoRows} />
+										<Label
+											for="rows-enabled"
+											class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
+											>Auto</Label
+										>
+									</div>
+								</div>
+								<Input
+									type="number"
+									inputmode="numeric"
+									step="any"
+									value={String(rows)}
+									oninput={(e) => {
+										const s = (e.currentTarget as HTMLInputElement).value;
+										const v = s.trim() === '' ? Number.NaN : Number(s);
+										rows = v;
+									}}
+									disabled={autoRows}
 								/>
-							</div>
+							</div> -->
 							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Opacity: {gridOpacity}</Label>
-								<Slider type="single" bind:value={gridOpacity} min={0} max={1} step={0.05} />
-							</div>
-						</div>
-					</div>
-				{/if}
-
-				{#if frame}
-					<div class="space-y-4">
-						<Label class="text-sm font-medium">Frame Style</Label>
-						<div class="grid grid-cols-2 gap-4">
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Color</Label>
-								<Input type="color" bind:value={frameStroke} class="h-9 w-full" />
-							</div>
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Line Style</Label>
-								<Select.Root type="single" bind:value={frameLineStyle}>
-									<Select.Trigger class="w-full">
-										{lineStyles.find((s) => s.value === frameLineStyle)?.label ?? 'Solid'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each lineStyles as style}
-											<Select.Item value={style.value}>{style.label}</Select.Item>
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
-							<div class="space-y-2">
-								<Label class="text-xs text-muted-foreground">Width: {frameStrokeWidth}</Label>
-								<Slider
-									type="single"
-									bind:value={frameStrokeWidth}
-									min={0.01}
-									max={0.2}
-									step={0.01}
+								<div class="flex items-center justify-between gap-2">
+									<Label class="text-xs text-muted-foreground" for="cols-enabled">Cols</Label>
+									<div class="flex items-center gap-1.5">
+										<Switch id="cols-enabled" bind:checked={autoCols} />
+										<Label
+											for="cols-enabled"
+											class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
+											>Auto</Label
+										>
+									</div>
+								</div>
+								<Input
+									type="number"
+									inputmode="numeric"
+									step="any"
+									value={String(cols)}
+									oninput={(e) => {
+										const s = (e.currentTarget as HTMLInputElement).value;
+										const v = s.trim() === '' ? Number.NaN : Number(s);
+										cols = v;
+									}}
+									disabled={autoCols}
 								/>
 							</div>
 						</div>
 					</div>
-				{/if}
-			</Card.Content>
-		</Card.Root>
 
-		<div class="mr-auto w-2xl space-y-6">
+					<div class="space-y-2">
+						<Label class="text-sm font-medium">Font</Label>
+						<div class="flex flex-wrap items-end gap-3">
+							<div class="min-w-fit flex-1">
+								<Select.Root type="single" bind:value={fontKey}>
+									<Select.Trigger class="w-full">
+										{monoFonts.find((f) => f.key === fontKey)?.label ?? 'System'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each monoFonts as f}
+											<Select.Item value={f.key}>{f.label}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+
+							<div class="min-w-fit space-y-2">
+								<Label class="text-xs text-muted-foreground" for="bold-toggle">Bold</Label>
+								<div class="flex h-9 items-center">
+									<Switch id="bold-toggle" bind:checked={bold} />
+								</div>
+							</div>
+
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Fill</Label>
+								<Input type="color" bind:value={fillColor} class="h-9 w-12 cursor-pointer p-0" />
+							</div>
+
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Stroke</Label>
+								<Input type="color" bind:value={strokeColor} class="h-9 w-12 cursor-pointer p-0" />
+							</div>
+
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Width</Label>
+								<Input
+									type="number"
+									min={0}
+									step={0.1}
+									value={String(strokeWidth)}
+									oninput={(e) => {
+										const s = (e.currentTarget as HTMLInputElement).value;
+										strokeWidth = s.trim() === '' ? 0 : Number(s);
+									}}
+									class="h-9 w-20"
+								/>
+							</div>
+
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">BG</Label>
+								<Input type="color" bind:value={bgColor} class="h-9 w-12 cursor-pointer p-0" />
+							</div>
+						</div>
+					</div>
+
+					<div class="space-y-4">
+						<Label class="text-sm font-medium">Margin</Label>
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Top: {marginTop}</Label>
+								<Slider type="single" bind:value={marginTop} min={0} max={5} step={1} />
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Right: {marginRight}</Label>
+								<Slider type="single" bind:value={marginRight} min={0} max={5} step={1} />
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Bottom: {marginBottom}</Label>
+								<Slider type="single" bind:value={marginBottom} min={0} max={5} step={1} />
+							</div>
+							<div class="space-y-2">
+								<Label class="text-xs text-muted-foreground">Left: {marginLeft}</Label>
+								<Slider type="single" bind:value={marginLeft} min={0} max={5} step={1} />
+							</div>
+						</div>
+					</div>
+
+					{#if showGrid}
+						<div class="space-y-4">
+							<Label class="text-sm font-medium">Grid Style</Label>
+							<div class="grid grid-cols-2 gap-4">
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Color</Label>
+									<Input type="color" bind:value={gridStroke} class="h-9 w-full" />
+								</div>
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Line Style</Label>
+									<Select.Root type="single" bind:value={gridLineStyle}>
+										<Select.Trigger class="w-full">
+											{lineStyles.find((s) => s.value === gridLineStyle)?.label ?? 'Solid'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each lineStyles as style}
+												<Select.Item value={style.value}>{style.label}</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								</div>
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Width: {gridStrokeWidth}</Label>
+									<Slider
+										type="single"
+										bind:value={gridStrokeWidth}
+										min={0.01}
+										max={0.1}
+										step={0.01}
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Opacity: {gridOpacity}</Label>
+									<Slider type="single" bind:value={gridOpacity} min={0} max={1} step={0.05} />
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					{#if frame}
+						<div class="space-y-4">
+							<Label class="text-sm font-medium">Frame Style</Label>
+							<div class="grid grid-cols-2 gap-4">
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Color</Label>
+									<Input type="color" bind:value={frameStroke} class="h-9 w-full" />
+								</div>
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Line Style</Label>
+									<Select.Root type="single" bind:value={frameLineStyle}>
+										<Select.Trigger class="w-full">
+											{lineStyles.find((s) => s.value === frameLineStyle)?.label ?? 'Solid'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each lineStyles as style}
+												<Select.Item value={style.value}>{style.label}</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								</div>
+								<div class="space-y-2">
+									<Label class="text-xs text-muted-foreground">Width: {frameStrokeWidth}</Label>
+									<Slider
+										type="single"
+										bind:value={frameStrokeWidth}
+										min={0.01}
+										max={0.2}
+										step={0.01}
+									/>
+								</div>
+							</div>
+						</div>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		</div>
+
+		<div class="mx-auto flex h-full w-fit max-w-2xl flex-col space-y-6 xl:mr-auto xl:ml-0">
 			<div
 				class="ascii-surface w-full resize overflow-auto rounded-sm border border-border"
 				style={buildWrapperStyle()}
@@ -625,8 +638,8 @@
 				/>
 			</div>
 
-			<Card.Root>
-				<Card.Content>
+			<Card.Root class="flex flex-1 flex-col">
+				<Card.Content class="space-y-4">
 					<div
 						class="overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
 					>
@@ -663,6 +676,16 @@
 			</Card.Root>
 		</div>
 	</div>
+
+	{#if data.renderedReadme}
+		<div class="mt-12 flex justify-center pb-24">
+			<Card.Root class="w-full max-w-6xl">
+				<Card.Content class="prose max-w-none p-6 prose-neutral sm:p-10 dark:prose-invert">
+					{@html data.renderedReadme}
+				</Card.Content>
+			</Card.Root>
+		</div>
+	{/if}
 </div>
 
 <style>

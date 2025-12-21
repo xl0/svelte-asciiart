@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@plugin '@tailwindcss/typography';
 
 @import 'tw-animate-css';
 
@@ -147,5 +148,17 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+	}
+
+	.prose table {
+		display: block;
+		width: 100%;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.prose table th,
+	.prose table td {
+		min-width: 120px;
 	}
 }
