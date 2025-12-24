@@ -175,7 +175,12 @@
 		if (fontKey === defaultFontKey) return '';
 		const family = monoFonts.find((f) => f.key === fontKey)?.family;
 		if (!family) return '';
-		return [`.ascii-font-${fontKey} {`, `  --ascii-font-family: ${family};`, `}`].join('\n');
+		return [
+			`:global(svg.ascii-font-${fontKey} text),`,
+			`:global(svg.ascii-font-${fontKey} tspan) {`,
+			`  font-family: ${family};`,
+			`}`
+		].join('\n');
 	}
 
 	function buildFontHead(): string {
@@ -290,20 +295,10 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	let highlightedCode = $state('');
-	let highlightedInstall = $state('');
-
-	$effect(() => {
-		const code = codePreview;
-		codeToHtml(code, { lang: 'svelte', theme: 'github-dark' }).then((html) => {
-			highlightedCode = html;
-		});
-		codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' }).then(
-			(html) => {
-				highlightedInstall = html;
-			}
-		);
-	});
+	let highlightedCode = $derived(await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' }));
+	let highlightedInstall = $derived(await
+		codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' })
+	);
 
 	let exampleCodeEl: HTMLDivElement | null = null;
 	let copied = $state(false);

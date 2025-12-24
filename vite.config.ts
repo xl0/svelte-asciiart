@@ -14,9 +14,9 @@ export default defineConfig({
 			]
 		}
 	},
-	ssr: {
-		noExternal: ['svelte-asciiart']
-	},
+	// ssr: {
+	// 	noExternal: ['svelte-asciiart']
+	// },
 	test: {
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		environment: 'jsdom',

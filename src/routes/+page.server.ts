@@ -22,9 +22,7 @@ export const load: PageServerLoad = async () => {
 		.use(remarkParse)
 		.use(remarkGfm)
 		.use(remarkRehype)
-		.use(rehypeShiki, {
-			theme: 'github-dark'
-		})
+		.use(rehypeShiki, { theme: 'github-dark' })
 		.use(rehypeStringify)
 		.process(readmeContent);
 
