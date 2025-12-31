@@ -61,6 +61,33 @@ Grid mode renders text character-by-character in a precise grid, useful for ASCI
 </style>
 ```
 
+## Exporting
+
+The package provides utilities to export styled SVGs and PNGs:
+
+```ts
+import { exportSvg, exportSvgToPng } from 'svelte-asciiart';
+
+// Export SVG with computed styles embedded as a <style> block
+const svgMarkup = exportSvg(svgElement, {
+  includeBackground: true,
+  backgroundColor: '#f3f4f6'
+});
+
+// Export to PNG (returns data URL by default)
+const pngDataUrl = await exportSvgToPng(svgElement, {
+  includeBackground: true,
+  backgroundColor: '#f3f4f6',
+  scale: 2 // retina scale factor
+});
+
+// Export to PNG as Blob
+const pngBlob = await exportSvgToPng(svgElement, { output: 'blob' });
+```
+
+The `exportSvg` function extracts computed styles from classed elements (e.g., `gridClass`, `frameClass`) and embeds them in the SVG, making it standalone and portable.
+
 ## License
 
 MIT
+

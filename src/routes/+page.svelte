@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AsciiArt } from 'svelte-asciiart';
+	import { AsciiArt, exportSvg, exportSvgToPng } from 'svelte-asciiart';
 	import type { PageData } from './$types';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Switch } from '$lib/components/ui/switch';
@@ -97,13 +97,18 @@
 	let gridLineStyle = $state('solid');
 	let bindSvg = $state(false);
 	let svg = $state<SVGSVGElement | null>(null);
-	let copiedSvg = $state(false);
-	let copiedSvgTimeout: ReturnType<typeof setTimeout> | undefined;
+	let copiedSvgRaw = $state(false);
+	let copiedSvgStyles = $state(false);
+	let copiedPng = $state(false);
+	let copiedSvgRawTimeout: ReturnType<typeof setTimeout> | undefined;
+	let copiedSvgStylesTimeout: ReturnType<typeof setTimeout> | undefined;
+	let copiedPngTimeout: ReturnType<typeof setTimeout> | undefined;
 	let bgColor = $state('#f3f4f6');
 	let fillColor = $state('#111827');
 	let strokeColor = $state('#111827');
 	let strokeWidth = $state(0);
 	let bold = $state(false);
+	let showExport = $state(false);
 	const fontFamily = $derived(
 		monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family
 	);
@@ -124,6 +129,40 @@
 
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
+
+	// Auto-generate PNG preview when showExport is on and SVG or styles change
+	const pngDataUrl = $derived.by(async () => {
+		if (!svg || !showExport) return null;
+		// Touch reactive deps
+		void [
+			text,
+			showGrid,
+			frame,
+			cellAspect,
+			frameMargin,
+			gridStroke,
+			gridStrokeWidth,
+			gridOpacity,
+			frameStroke,
+			frameStrokeWidth,
+			gridDashArray,
+			frameDashArray,
+			bgColor,
+			fillColor,
+			strokeColor,
+			strokeWidth,
+			bold,
+			fontFamily,
+			rowsProp,
+			colsProp
+		];
+		try {
+			return await exportSvgToPng(svg, { includeBackground: true, backgroundColor: bgColor });
+		} catch (e) {
+			console.error('Failed to generate PNG:', e);
+			return null;
+		}
+	});
 
 	function buildMarginProp(): string {
 		const hasMargin = marginTop > 0 || marginRight > 0 || marginBottom > 0 || marginLeft > 0;
@@ -224,7 +263,11 @@
 			lines.push('');
 		}
 		lines.push('<script lang="ts">');
-		lines.push("  import { AsciiArt } from 'svelte-asciiart';");
+		if (bindSvg && showExport) {
+			lines.push("  import { AsciiArt, exportSvg, exportSvgToPng } from 'svelte-asciiart';");
+		} else {
+			lines.push("  import { AsciiArt } from 'svelte-asciiart';");
+		}
 		if (bindSvg) {
 			lines.push('  let svg = $state<SVGSVGElement>();');
 		}
@@ -244,12 +287,36 @@
 		if (showGrid) lines.push('  gridClass="ascii-grid"');
 		if (frame) lines.push('  frameClass="ascii-frame"');
 		lines.push('/>');
-		if (bindSvg) {
+		if (bindSvg && !showExport) {
 			lines.push('');
 			lines.push('{#if svg}');
 			lines.push(
 				'  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
 			);
+			lines.push('{/if}');
+		}
+		if (bindSvg && showExport) {
+			lines.push('');
+			lines.push('{#if svg}');
+			lines.push(
+				'  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
+			);
+			lines.push('  <button type="button" onclick={async () => {');
+			lines.push(
+				'    const markup = exportSvg(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });'
+			);
+			lines.push('    await navigator.clipboard.writeText(markup);');
+			lines.push('  }}>Copy SVG + Styles</button>');
+			lines.push('  <button type="button" onclick={async () => {');
+			lines.push(
+				'    const dataUrl = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });'
+			);
+			lines.push('    const response = await fetch(dataUrl);');
+			lines.push('    const blob = await response.blob();');
+			lines.push(
+				'    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);'
+			);
+			lines.push('  }}>Copy PNG</button>');
 			lines.push('{/if}');
 		}
 		lines.push('');
@@ -295,16 +362,18 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	let highlightedCode = $derived(await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' }));
-	let highlightedInstall = $derived(await
-		codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' })
+	let highlightedCode = $derived(
+		await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' })
+	);
+	let highlightedInstall = $derived(
+		await codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' })
 	);
 
 	let exampleCodeEl: HTMLDivElement | null = null;
 	let copied = $state(false);
 	let copiedTimeout: ReturnType<typeof setTimeout> | undefined;
 
-	async function copySvg() {
+	async function copySvgRaw() {
 		if (!svg) return;
 		const markup = svg.outerHTML;
 		try {
@@ -319,10 +388,50 @@
 			document.execCommand('copy');
 			ta.remove();
 		}
-		copiedSvg = true;
-		if (copiedSvgTimeout) clearTimeout(copiedSvgTimeout);
-		copiedSvgTimeout = setTimeout(() => {
-			copiedSvg = false;
+		copiedSvgRaw = true;
+		if (copiedSvgRawTimeout) clearTimeout(copiedSvgRawTimeout);
+		copiedSvgRawTimeout = setTimeout(() => {
+			copiedSvgRaw = false;
+		}, 800);
+	}
+
+	async function copySvgWithStyles() {
+		if (!svg) return;
+		const markup = exportSvg(svg, { includeBackground: true, backgroundColor: bgColor });
+		try {
+			await navigator.clipboard.writeText(markup);
+		} catch {
+			const ta = document.createElement('textarea');
+			ta.value = markup;
+			ta.style.position = 'fixed';
+			ta.style.left = '-99999px';
+			document.body.append(ta);
+			ta.select();
+			document.execCommand('copy');
+			ta.remove();
+		}
+		copiedSvgStyles = true;
+		if (copiedSvgStylesTimeout) clearTimeout(copiedSvgStylesTimeout);
+		copiedSvgStylesTimeout = setTimeout(() => {
+			copiedSvgStyles = false;
+		}, 800);
+	}
+
+	async function copyPng() {
+		const url = await pngDataUrl;
+		if (!url) return;
+		try {
+			const response = await fetch(url);
+			const blob = await response.blob();
+			await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+		} catch (e) {
+			console.error('Failed to copy PNG:', e);
+			return;
+		}
+		copiedPng = true;
+		if (copiedPngTimeout) clearTimeout(copiedPngTimeout);
+		copiedPngTimeout = setTimeout(() => {
+			copiedPng = false;
 		}, 800);
 	}
 
@@ -391,13 +500,12 @@
 							<Switch id="bind-svg-toggle" bind:checked={bindSvg} />
 							<Label for="bind-svg-toggle" class="whitespace-nowrap">Bind SVG</Label>
 						</div>
-						<div class="flex flex-wrap gap-2">
-							{#if bindSvg}
-								<Button variant="outline" onclick={copySvg} disabled={!svg} size="sm">
-									{copiedSvg ? 'Copied' : 'Copy SVG'}
-								</Button>
-							{/if}
-						</div>
+						{#if bindSvg}
+							<div class="flex min-w-fit items-center gap-2">
+								<Switch id="export-toggle" bind:checked={showExport} />
+								<Label for="export-toggle" class="whitespace-nowrap">Demo Export</Label>
+							</div>
+						{/if}
 					</div>
 
 					<div class="space-y-2">
@@ -632,6 +740,35 @@
 					frameClass={frame ? 'ascii-frame' : ''}
 				/>
 			</div>
+
+			{#if bindSvg}
+				<div class="flex flex-wrap gap-2">
+					<Button variant="outline" onclick={copySvgRaw} disabled={!svg} size="sm">
+						{copiedSvgRaw ? 'Copied!' : 'Copy SVG'}
+					</Button>
+					{#if showExport}
+						<Button variant="outline" onclick={copySvgWithStyles} disabled={!svg} size="sm">
+							{copiedSvgStyles ? 'Copied!' : 'Copy SVG + Styles'}
+						</Button>
+						<Button variant="outline" onclick={copyPng} size="sm">
+							{copiedPng ? 'Copied!' : 'Copy PNG'}
+						</Button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if showExport}
+				{#await pngDataUrl then url}
+					{#if url}
+						<div class="space-y-2">
+							<Label class="text-sm font-medium text-muted-foreground">PNG Export Preview</Label>
+							<div class="overflow-auto rounded-sm border border-border bg-muted/50 p-2">
+								<img src={url} alt="PNG preview" class="max-w-full" />
+							</div>
+						</div>
+					{/if}
+				{/await}
+			{/if}
 
 			<Card.Root class="flex flex-1 flex-col">
 				<Card.Content class="space-y-4">
