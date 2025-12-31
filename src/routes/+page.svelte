@@ -124,15 +124,8 @@
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
 
-	// Auto-generate PNG preview when showExport is on and SVG or styles change (debounced)
-	let pngPreviewUrl = $state<string | null>(null);
-	$effect(() => {
-		if (!svg || !showExport) {
-			if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
-			pngPreviewUrl = null;
-			return;
-		}
-		// Touch reactive deps
+	// Touch all reactive inputs that affect the rendered SVG
+	const touchInputs = () =>
 		void [
 			text,
 			showGrid,
@@ -157,6 +150,16 @@
 			baseSize
 		];
 
+	// Auto-generate PNG preview when showExport is on and SVG or styles change (debounced)
+	let pngPreviewUrl = $state<string | null>(null);
+	$effect(() => {
+		if (!svg || !showExport) {
+			if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
+			pngPreviewUrl = null;
+			return;
+		}
+		touchInputs();
+
 		// Capture values before timeout
 		const svgEl = svg;
 		const bg = bgColor;
@@ -179,11 +182,13 @@
 	// Derived SVG exports for display
 	const svgRaw = $derived.by(() => {
 		if (!svg || !showExport) return null;
+		touchInputs();
 		return svg.outerHTML;
 	});
 
 	const svgStyled = $derived.by(() => {
 		if (!svg || !showExport) return null;
+		touchInputs();
 		return exportSvg(svg, { includeBackground: true, backgroundColor: bgColor });
 	});
 
