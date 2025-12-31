@@ -144,7 +144,7 @@ export async function exportSvgToPng(
 	svgEl: SVGSVGElement,
 	options: ExportPngOptions = {}
 ): Promise<string | Blob> {
-	const { scale = 2, output = 'dataUrl', ...svgOptions } = options;
+	const { scale = 1, output = 'dataUrl', ...svgOptions } = options;
 
 	// Get the exported SVG with embedded styles
 	const svgString = exportSvg(svgEl, svgOptions);
