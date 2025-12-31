@@ -15,6 +15,8 @@
 		margin?: Margin;
 		frameClass?: string;
 		svg?: SVGSVGElement | null;
+		/** Pixels per viewBox unit for intrinsic size. Default: 50 */
+		baseSize?: number;
 	}
 
 	let {
@@ -29,6 +31,7 @@
 		margin = 0,
 		frameClass = '',
 		svg = $bindable(),
+		baseSize = 50,
 		...rest
 	}: Props = $props();
 
@@ -79,12 +82,18 @@
 	const offsetY = $derived(parsedMargin.top * cellHeight);
 
 	const viewBox = $derived(`0 0 ${fmt(viewBoxWidth)} ${fmt(viewBoxHeight)}`);
+
+	// Intrinsic size for export (actual rendering uses style for responsiveness)
+	const intrinsicWidth = $derived(fmt(viewBoxWidth * baseSize));
+	const intrinsicHeight = $derived(fmt(viewBoxHeight * baseSize));
 </script>
 
 <svg
 	bind:this={svg}
 	{...rest}
 	{viewBox}
+	width={intrinsicWidth}
+	height={intrinsicHeight}
 	overflow="hidden"
 	preserveAspectRatio="xMinYMin meet"
 	xmlns="http://www.w3.org/2000/svg"

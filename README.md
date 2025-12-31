@@ -39,6 +39,7 @@ npm install svelte-asciiart
 | `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`      | Margin around the frame in grid cells (top/right/bottom/left) |
 | `frameClass` | `string`                                                         | `''`     | CSS class for the frame `<rect>`                              |
 | `svg`        | `SVGSVGElement \| null`                                          | bindable | Optionally bind the underlying `<svg>` element                |
+| `baseSize`   | `number`                                                         | `50`     | Pixels per viewBox unit for intrinsic SVG size (for exports)  |
 | `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -        | All other SVG attributes are forwarded to the `<svg>` element |
 
 ## Grid Mode

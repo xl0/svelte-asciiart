@@ -122,51 +122,37 @@ export function exportSvg(svgEl: SVGSVGElement, options: ExportSvgOptions = {}):
 }
 
 export interface ExportPngOptions extends ExportSvgOptions {
-	/** Scale factor for the PNG. Default: 2 (for retina) */
+	/** Scale factor for the PNG. Default: 1 */
+	scale?: number;
+	/** Output format. Default: 'dataUrl' */
+	output?: 'dataUrl' | 'blob';
+}
+
+export interface SvgStringToPngOptions {
+	/** Scale factor for the PNG. Default: 1 */
 	scale?: number;
 	/** Output format. Default: 'dataUrl' */
 	output?: 'dataUrl' | 'blob';
 }
 
 /**
- * Export an SVG element to PNG.
- * Returns a data URL or Blob depending on options.
+ * Convert an SVG string to PNG.
+ * Uses the browser's computed dimensions from the loaded image.
  */
-export async function exportSvgToPng(
-	svgEl: SVGSVGElement,
-	options: ExportPngOptions & { output: 'blob' }
+export async function svgStringToPng(
+	svgString: string,
+	options: SvgStringToPngOptions & { output: 'blob' }
 ): Promise<Blob>;
-export async function exportSvgToPng(
-	svgEl: SVGSVGElement,
-	options?: ExportPngOptions
+export async function svgStringToPng(
+	svgString: string,
+	options?: SvgStringToPngOptions
 ): Promise<string>;
-export async function exportSvgToPng(
-	svgEl: SVGSVGElement,
-	options: ExportPngOptions = {}
+export async function svgStringToPng(
+	svgString: string,
+	options: SvgStringToPngOptions = {}
 ): Promise<string | Blob> {
-	const { scale = 1, output = 'dataUrl', ...svgOptions } = options;
+	const { scale = 1, output = 'dataUrl' } = options;
 
-	// Get the exported SVG with embedded styles
-	const svgString = exportSvg(svgEl, svgOptions);
-
-	// Parse viewBox to get dimensions
-	const viewBox = svgEl.getAttribute('viewBox');
-	if (!viewBox) throw new Error('SVG must have a viewBox attribute');
-	const [, , vbWidth, vbHeight] = viewBox.split(/\s+/).map(Number);
-
-	// Use a reasonable base size (e.g., 100px per viewBox unit, then scale)
-	const baseSize = 100;
-	const width = Math.round(vbWidth * baseSize * scale);
-	const height = Math.round(vbHeight * baseSize * scale);
-
-	// Create canvas
-	const canvas = document.createElement('canvas');
-	canvas.width = width;
-	canvas.height = height;
-	const ctx = canvas.getContext('2d');
-	if (!ctx) throw new Error('Could not get canvas 2d context');
-
-	// Create image from SVG
 	const img = new Image();
 	const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
 	const url = URL.createObjectURL(svgBlob);
@@ -174,6 +160,25 @@ export async function exportSvgToPng(
 	return new Promise((resolve, reject) => {
 		img.onload = () => {
 			URL.revokeObjectURL(url);
+
+			// Use browser's computed dimensions
+			const width = Math.round(img.naturalWidth * scale);
+			const height = Math.round(img.naturalHeight * scale);
+
+			if (width === 0 || height === 0) {
+				reject(new Error('SVG has zero dimensions - ensure it has width/height or viewBox'));
+				return;
+			}
+
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				reject(new Error('Could not get canvas 2d context'));
+				return;
+			}
+
 			ctx.drawImage(img, 0, 0, width, height);
 
 			if (output === 'blob') {
@@ -192,3 +197,25 @@ export async function exportSvgToPng(
 		img.src = url;
 	});
 }
+
+/**
+ * Export an SVG element to PNG.
+ * Returns a data URL or Blob depending on options.
+ */
+export async function exportSvgToPng(
+	svgEl: SVGSVGElement,
+	options: ExportPngOptions & { output: 'blob' }
+): Promise<Blob>;
+export async function exportSvgToPng(
+	svgEl: SVGSVGElement,
+	options?: ExportPngOptions
+): Promise<string>;
+export async function exportSvgToPng(
+	svgEl: SVGSVGElement,
+	options: ExportPngOptions = {}
+): Promise<string | Blob> {
+	const { scale, output, ...svgOptions } = options;
+	const svgString = exportSvg(svgEl, svgOptions);
+	return svgStringToPng(svgString, { scale, output });
+}
+

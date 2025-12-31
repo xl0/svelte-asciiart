@@ -7,9 +7,10 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { Check, Copy } from '@lucide/svelte';
+	import { Check, Copy, ChevronDown } from '@lucide/svelte';
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { codeToHtml } from 'shiki';
 
 	let { data }: { data: PageData } = $props();
@@ -25,8 +26,7 @@
 		{
 			key: 'system',
 			label: 'System',
-			family:
-				'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+			family: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 		},
 		{
 			key: 'jetbrains',
@@ -109,16 +109,10 @@
 	let strokeWidth = $state(0);
 	let bold = $state(false);
 	let showExport = $state(false);
-	const fontFamily = $derived(
-		monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family
-	);
+	let baseSize = $state(50);
+	const fontFamily = $derived(monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family);
 
-	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [
-		number,
-		number,
-		number,
-		number
-	]);
+	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [number, number, number, number]);
 
 	const rowsProp = $derived(!autoRows && Number.isFinite(rows) ? rows : undefined);
 	const colsProp = $derived(!autoCols && Number.isFinite(cols) ? cols : undefined);
@@ -130,9 +124,14 @@
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
 
-	// Auto-generate PNG preview when showExport is on and SVG or styles change
-	const pngDataUrl = $derived.by(async () => {
-		if (!svg || !showExport) return null;
+	// Auto-generate PNG preview when showExport is on and SVG or styles change (debounced)
+	let pngPreviewUrl = $state<string | null>(null);
+	$effect(() => {
+		if (!svg || !showExport) {
+			if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
+			pngPreviewUrl = null;
+			return;
+		}
 		// Touch reactive deps
 		void [
 			text,
@@ -154,14 +153,38 @@
 			bold,
 			fontFamily,
 			rowsProp,
-			colsProp
+			colsProp,
+			baseSize
 		];
-		try {
-			return await exportSvgToPng(svg, { includeBackground: true, backgroundColor: bgColor });
-		} catch (e) {
-			console.error('Failed to generate PNG:', e);
-			return null;
-		}
+
+		// Capture values before timeout
+		const svgEl = svg;
+		const bg = bgColor;
+
+		const timeout = setTimeout(async () => {
+			try {
+				const blob = await exportSvgToPng(svgEl, { includeBackground: true, backgroundColor: bg, output: 'blob' });
+				if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
+				pngPreviewUrl = URL.createObjectURL(blob);
+			} catch (e) {
+				console.error('Failed to generate PNG:', e);
+				if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
+				pngPreviewUrl = null;
+			}
+		}, 200);
+
+		return () => clearTimeout(timeout);
+	});
+
+	// Derived SVG exports for display
+	const svgRaw = $derived.by(() => {
+		if (!svg || !showExport) return null;
+		return svg.outerHTML;
+	});
+
+	const svgStyled = $derived.by(() => {
+		if (!svg || !showExport) return null;
+		return exportSvg(svg, { includeBackground: true, backgroundColor: bgColor });
 	});
 
 	function buildMarginProp(): string {
@@ -286,36 +309,27 @@
 		if (classProp) lines.push(classProp.slice(1));
 		if (showGrid) lines.push('  gridClass="ascii-grid"');
 		if (frame) lines.push('  frameClass="ascii-frame"');
+		if (showExport && baseSize !== 50) lines.push(`  baseSize={${baseSize}}`);
 		lines.push('/>');
 		if (bindSvg && !showExport) {
 			lines.push('');
 			lines.push('{#if svg}');
-			lines.push(
-				'  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
-			);
+			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
 			lines.push('{/if}');
 		}
 		if (bindSvg && showExport) {
 			lines.push('');
 			lines.push('{#if svg}');
-			lines.push(
-				'  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>'
-			);
+			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
 			lines.push('  <button type="button" onclick={async () => {');
-			lines.push(
-				'    const markup = exportSvg(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });'
-			);
+			lines.push('    const markup = exportSvg(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });');
 			lines.push('    await navigator.clipboard.writeText(markup);');
 			lines.push('  }}>Copy SVG + Styles</button>');
 			lines.push('  <button type="button" onclick={async () => {');
-			lines.push(
-				'    const dataUrl = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });'
-			);
+			lines.push('    const dataUrl = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });');
 			lines.push('    const response = await fetch(dataUrl);');
 			lines.push('    const blob = await response.blob();');
-			lines.push(
-				'    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);'
-			);
+			lines.push('    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);');
 			lines.push('  }}>Copy PNG</button>');
 			lines.push('{/if}');
 		}
@@ -362,12 +376,8 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	let highlightedCode = $derived(
-		await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' })
-	);
-	let highlightedInstall = $derived(
-		await codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' })
-	);
+	let highlightedCode = $derived(await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' }));
+	let highlightedInstall = $derived(await codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' }));
 
 	let exampleCodeEl: HTMLDivElement | null = null;
 	let copied = $state(false);
@@ -418,11 +428,9 @@
 	}
 
 	async function copyPng() {
-		const url = await pngDataUrl;
-		if (!url) return;
+		if (!svg) return;
 		try {
-			const response = await fetch(url);
-			const blob = await response.blob();
+			const blob = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: bgColor, output: 'blob' });
 			await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 		} catch (e) {
 			console.error('Failed to copy PNG:', e);
@@ -483,8 +491,7 @@
 							id="ascii-input"
 							bind:value={text}
 							rows={6}
-							class="overflow-x-scroll overflow-y-auto font-mono text-sm whitespace-nowrap"
-						/>
+							class="overflow-x-scroll overflow-y-auto font-mono text-sm whitespace-nowrap" />
 					</div>
 
 					<div class="flex flex-wrap gap-4">
@@ -508,9 +515,28 @@
 						{/if}
 					</div>
 
-					<div class="space-y-2">
-						<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
-						<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
+					<div class="flex items-end gap-4 w-full">
+						<div class="flex-1 space-y-2">
+							<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
+							<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
+						</div>
+
+						{#if showExport}
+							<div class="w-fit space-y-2">
+								<Label for="base-size" class="text-xs whitespace-nowrap text-muted-foreground">Base Size</Label>
+								<Input
+									id="base-size"
+									type="number"
+									min={10}
+									max={200}
+									value={String(baseSize)}
+									oninput={(e) => {
+										const v = Number((e.currentTarget as HTMLInputElement).value);
+										if (Number.isFinite(v) && v > 0) baseSize = v;
+									}}
+									class="h-9 w-20" />
+							</div>
+						{/if}
 					</div>
 
 					<div class="space-y-4">
@@ -521,11 +547,7 @@
 									<Label class="text-xs text-muted-foreground" for="rows-enabled">Rows</Label>
 									<div class="flex items-center gap-1.5">
 										<Switch id="rows-enabled" bind:checked={autoRows} />
-										<Label
-											for="rows-enabled"
-											class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
-											>Auto</Label
-										>
+										<Label for="rows-enabled" class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Auto</Label>
 									</div>
 								</div>
 								<Input
@@ -538,19 +560,14 @@
 										const v = s.trim() === '' ? Number.NaN : Number(s);
 										rows = v;
 									}}
-									disabled={autoRows}
-								/>
+									disabled={autoRows} />
 							</div>
 							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-2">
 									<Label class="text-xs text-muted-foreground" for="cols-enabled">Cols</Label>
 									<div class="flex items-center gap-1.5">
 										<Switch id="cols-enabled" bind:checked={autoCols} />
-										<Label
-											for="cols-enabled"
-											class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
-											>Auto</Label
-										>
+										<Label for="cols-enabled" class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Auto</Label>
 									</div>
 								</div>
 								<Input
@@ -563,8 +580,7 @@
 										const v = s.trim() === '' ? Number.NaN : Number(s);
 										cols = v;
 									}}
-									disabled={autoCols}
-								/>
+									disabled={autoCols} />
 							</div>
 						</div>
 					</div>
@@ -613,8 +629,7 @@
 										const s = (e.currentTarget as HTMLInputElement).value;
 										strokeWidth = s.trim() === '' ? 0 : Number(s);
 									}}
-									class="h-9 w-20"
-								/>
+									class="h-9 w-20" />
 							</div>
 
 							<div class="space-y-2">
@@ -669,13 +684,7 @@
 								</div>
 								<div class="space-y-2">
 									<Label class="text-xs text-muted-foreground">Width: {gridStrokeWidth}</Label>
-									<Slider
-										type="single"
-										bind:value={gridStrokeWidth}
-										min={0.01}
-										max={0.1}
-										step={0.01}
-									/>
+									<Slider type="single" bind:value={gridStrokeWidth} min={0.01} max={0.1} step={0.01} />
 								</div>
 								<div class="space-y-2">
 									<Label class="text-xs text-muted-foreground">Opacity: {gridOpacity}</Label>
@@ -708,13 +717,7 @@
 								</div>
 								<div class="space-y-2">
 									<Label class="text-xs text-muted-foreground">Width: {frameStrokeWidth}</Label>
-									<Slider
-										type="single"
-										bind:value={frameStrokeWidth}
-										min={0.01}
-										max={0.2}
-										step={0.01}
-									/>
+									<Slider type="single" bind:value={frameStrokeWidth} min={0.01} max={0.2} step={0.01} />
 								</div>
 							</div>
 						</div>
@@ -724,10 +727,7 @@
 		</div>
 
 		<div class="mx-auto flex h-full w-fit max-w-2xl flex-col space-y-6 xl:mr-auto xl:ml-0">
-			<div
-				class="ascii-surface w-full resize overflow-auto rounded-sm border border-border"
-				style={buildWrapperStyle()}
-			>
+			<div class="ascii-surface w-full resize overflow-auto rounded-sm border border-border" style={buildWrapperStyle()}>
 				<AsciiArt
 					bind:svg
 					{text}
@@ -738,7 +738,7 @@
 					margin={frameMargin}
 					gridClass={showGrid ? 'ascii-grid' : ''}
 					frameClass={frame ? 'ascii-frame' : ''}
-				/>
+					baseSize={showExport ? baseSize : undefined} />
 			</div>
 
 			{#if bindSvg}
@@ -758,49 +758,60 @@
 			{/if}
 
 			{#if showExport}
-				{#await pngDataUrl then url}
-					{#if url}
-						<div class="space-y-2">
-							<Label class="text-sm font-medium text-muted-foreground">PNG Export Preview</Label>
-							<div class="overflow-auto rounded-sm border border-border bg-muted/50 p-2">
-								<img src={url} alt="PNG preview" class="max-w-full" />
-							</div>
+				{#if pngPreviewUrl}
+					<div class="space-y-2">
+						<Label class="text-sm font-medium text-muted-foreground">PNG Export Preview</Label>
+						<div class="overflow-auto rounded-sm border border-border bg-muted/50 p-2">
+							<img src={pngPreviewUrl} alt="PNG preview" class="max-w-full" />
 						</div>
-					{/if}
-				{/await}
+					</div>
+				{/if}
+
+				{#if svgRaw}
+					<Collapsible.Root class="space-y-2">
+						<Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+							<ChevronDown class="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+							Raw SVG
+						</Collapsible.Trigger>
+						<Collapsible.Content>
+							<Textarea value={svgRaw} readonly rows={6} class="font-mono text-xs" />
+						</Collapsible.Content>
+					</Collapsible.Root>
+				{/if}
+
+				{#if svgStyled}
+					<Collapsible.Root class="space-y-2">
+						<Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+							<ChevronDown class="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+							SVG with Embedded Styles
+						</Collapsible.Trigger>
+						<Collapsible.Content>
+							<Textarea value={svgStyled} readonly rows={6} class="font-mono text-xs" />
+						</Collapsible.Content>
+					</Collapsible.Root>
+				{/if}
 			{/if}
 
 			<Card.Root class="flex flex-1 flex-col">
 				<Card.Content class="space-y-4">
-					<div
-						class="overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
-					>
+					<div class="overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap">
 						{@html highlightedInstall}
 					</div>
 				</Card.Content>
 				<Card.Content>
-					<div
-						class="group relative overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
-					>
+					<div class="group relative overflow-auto rounded-sm text-sm [&_pre]:p-4 [&_pre]:break-words [&_pre]:whitespace-pre-wrap">
 						<button
 							type="button"
 							class="absolute top-2 right-2 rounded border border-border bg-background/80 p-1.5 text-foreground opacity-0 backdrop-blur transition-opacity group-hover:opacity-100"
 							onclick={copyExampleCode}
-							title={copied ? 'Copied' : 'Copy'}
-						>
+							title={copied ? 'Copied' : 'Copy'}>
 							{#if copied}
 								<Check class="h-4 w-4" />
 							{:else}
 								<Copy class="h-4 w-4" />
 							{/if}
 						</button>
-						<div
-							bind:this={exampleCodeEl}
-							role="textbox"
-							tabindex="0"
-							aria-label="Example code"
-							onkeydown={onExampleKeydown}
-						>
+						<div bind:this={exampleCodeEl} role="textbox" tabindex="0" aria-label="Example code" onkeydown={onExampleKeydown}>
 							{@html highlightedCode}
 						</div>
 					</div>
