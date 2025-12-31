@@ -22,6 +22,7 @@
 		rows,
 		cols,
 		grid = false,
+		// Width:Height ratio for monospace is typically ~0.6 and getting the exact number dynamically is a hassle.
 		cellAspect = 0.6,
 		gridClass = '',
 		frame = false,
@@ -61,7 +62,6 @@
 	const charAt = (r: number, c: number) => (paddedLines[r] ?? '').charAt(c) || ' ';
 
 	// Character dimensions for monospace font (approximate ratio)
-	// Width:Height ratio for monospace is typically ~0.6
 	const cellHeight = 1;
 	const defaultFontStack =
 		'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
