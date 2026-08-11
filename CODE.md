@@ -1,10 +1,10 @@
 # CODE.md
 
-Monorepo (bun workspaces): thin root, publishable library in `packages/svelte-asciiart`, SvelteKit demo app in `demo/` (depends on `svelte-asciiart: workspace:*`). Root package.json only delegates scripts (`dev`, `build:demo`, `check`, `test`, `format`).
+Monorepo (bun workspaces): thin root, publishable library in `packages/svelte-asciiart`, SvelteKit demo app in `demo/` (depends on `svelte-asciiart: workspace:*`). Root package.json delegates `dev`/`build`/`build:demo`/`preview` to demo, `check` to both workspaces, and `test` to the package; root-local: `release` (scripts/release.ts), `format`/`lint` (prettier + plugins are root devDeps, shared by the workspaces via hoisting).
 
 ## Library (`packages/svelte-asciiart`)
 
-Published to npm as `svelte-asciiart` (v0.0.5). Svelte 5 only (peer dep). Built with `svelte-package`; `prepack` copies the root `README.md` into the package and runs publint.
+Published to npm as `svelte-asciiart` (v0.0.5). Svelte 5 only (peer dep). Built with `svelte-package`; `prepack` copies the root `README.md` and `LICENSE` into the package and runs publint. MIT licensed.
 
 ### `src/lib/AsciiArt.svelte`
 
@@ -23,7 +23,9 @@ Renders ASCII text as an SVG character grid.
 
 ### Tests
 
-`src/lib/AsciiArt.test.ts` — 14 vitest browser tests (playwright via `@vitest/browser-playwright`). `bun run test` from root delegates to the package.
+Vitest browser tests (playwright via `@vitest/browser-playwright`, rendering via `vitest-browser-svelte`); `bun run test` from root delegates to the package.
+- `src/lib/AsciiArt.test.ts` — component markup (viewBox math, tspans, grid/frame).
+- `src/lib/utils.test.ts` — export path: style inlining into `<defs><style>`, background rect, PNG dimensions/scale/blob, end-to-end pixel check.
 
 ## Releases
 
@@ -36,6 +38,6 @@ Renders ASCII text as an SVG character grid.
 
 - `src/routes/+page.svelte`: single-page demo/playground (~860 lines) — interactive controls (shadcn-svelte/bits-ui components in `src/lib/components/ui/`), export buttons.
 - `src/routes/+page.server.ts`: renders the root `README.md` (`resolve('..', 'README.md')` — cwd is `demo/`) to HTML via remark/rehype + shiki, strips the badge line.
-- Vite aliases `svelte-asciiart` to `../packages/svelte-asciiart/src/lib/index.ts` (live source, not dist).
+- `kit.alias` maps `svelte-asciiart` to `../packages/svelte-asciiart/src/lib/index.ts` (live source, not dist) — applies to both vite and svelte-check, so `check` works without a built dist.
 - Static adapter; `build:demo` sets `BASE_PATH=/svelte-asciiart`; Pages workflow uploads `demo/build`.
 - Tailwind 4; shared styles in `src/routes/layout.css`.
