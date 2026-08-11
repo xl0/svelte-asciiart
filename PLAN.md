@@ -6,11 +6,11 @@ Publish a Svelte 5 component (`AsciiArt`) that renders ASCII art as scalable SVG
 
 ## Plan
 
-- [x] Monorepo layout: root demo app + `packages/svelte-asciiart` library package
+- [x] Monorepo layout: thin root + `demo/` app + `packages/svelte-asciiart` library package
 - [x] Implement `AsciiArt` (`packages/svelte-asciiart/src/lib/AsciiArt.svelte`)
 - [x] Export `AsciiArt` from `packages/svelte-asciiart/src/lib/index.ts`
 - [x] Package unit tests (`packages/svelte-asciiart/src/lib/AsciiArt.test.ts`, 14 tests)
-- [x] Demo page (`src/routes/+page.svelte`)
+- [x] Demo page (`demo/src/routes/+page.svelte`)
 - [x] SVG/PNG export utilities (`exportSvg`, `exportSvgToPng`, `svgStringToPng`)
 
 - [ ] ANSI colors: decide scope + pick implementation option

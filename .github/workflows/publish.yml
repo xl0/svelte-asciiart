@@ -1,0 +1,116 @@
+name: Release
+
+# `scripts/release.ts` pushes the tag; that push is the only trigger. Tags with
+# a prerelease suffix (v1.2.3-rc.1) are ignored.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency: npm-publish
+
+jobs:
+  publish-npm:
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      - run: npm install --global npm@12.0.2
+      - run: bun install --frozen-lockfile
+
+      - name: Verify release tag matches package version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/svelte-asciiart/package.json').version")"
+
+      # Browser tests run in headless chromium via @vitest/browser-playwright.
+      - run: bunx playwright install --with-deps chromium
+        working-directory: packages/svelte-asciiart
+
+      # Run the verification steps explicitly so a failure names itself and so
+      # the publish below can skip lifecycle scripts entirely. `prepack` builds
+      # dist/, copies the root README into the package and runs publint.
+      - run: bun run check
+        working-directory: packages/svelte-asciiart
+      - run: bun run test
+        working-directory: packages/svelte-asciiart
+      - run: bun run prepack
+        working-directory: packages/svelte-asciiart
+
+      # Staged publish: the version lands in npm's staging queue and only goes
+      # live once a maintainer runs `npm stage approve` (2FA). Skipping an
+      # already-published or already-staged version is what lets a half-failed
+      # release be re-run. A registry error still fails: only a 404 means "not
+      # there".
+      - name: Stage publish to npm
+        working-directory: packages/svelte-asciiart
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+          if seen="$(npm view "svelte-asciiart@${version}" version 2>&1)"; then
+            echo "svelte-asciiart@${version} is already published (${seen}); skipping."
+            exit 0
+          fi
+          case "$seen" in
+            *E404*|*"404 Not Found"*) ;;
+            *) echo "::error::could not query npm for ${version}: ${seen}"; exit 1 ;;
+          esac
+
+          if npm stage list 2>/dev/null | grep -qF "${version}"; then
+            echo "svelte-asciiart@${version} is already staged; skipping."
+            exit 0
+          fi
+
+          npm stage publish --access public --provenance --ignore-scripts
+
+          echo "Staged ${version}. Approve it with: npm stage approve"
+
+  github-release:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Gated on publish-npm, i.e. the version is staged (or live). It may be
+      # visible a few minutes before `npm stage approve` makes it installable —
+      # an accepted cosmetic gap.
+      - name: Create the GitHub Release
+        run: |
+          set -euo pipefail
+
+          awk -v want="## [${GITHUB_REF_NAME#v}]" '
+            index($0, want) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > NOTES.md
+
+          test -s NOTES.md || { echo "::error::no CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
+
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file NOTES.md

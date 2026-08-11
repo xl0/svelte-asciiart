@@ -1,6 +1,6 @@
 # CODE.md
 
-Monorepo: SvelteKit demo app at the root, publishable library in `packages/svelte-asciiart` (bun workspaces, demo depends on `svelte-asciiart: workspace:*`).
+Monorepo (bun workspaces): thin root, publishable library in `packages/svelte-asciiart`, SvelteKit demo app in `demo/` (depends on `svelte-asciiart: workspace:*`). Root package.json only delegates scripts (`dev`, `build:demo`, `check`, `test`, `format`).
 
 ## Library (`packages/svelte-asciiart`)
 
@@ -25,10 +25,17 @@ Renders ASCII text as an SVG character grid.
 
 `src/lib/AsciiArt.test.ts` — 14 vitest browser tests (playwright via `@vitest/browser-playwright`). `bun run test` from root delegates to the package.
 
-## Demo app (root)
+## Releases
+
+- `CHANGELOG.md` (root, Keep-a-Changelog-ish) covers the published package only; `/cl` audits `[Unreleased]` against commits since the last `v*` tag.
+- `bun run release [patch|minor|major|x.y.z] [--no-push]` (`scripts/release.ts`): rolls changelog, bumps package version, verifies (check/test/prepack/pack), commits, tags `v<ver>`, pushes.
+- Tag push triggers `.github/workflows/publish.yml`: verify tag==version, check/test/prepack, `npm stage publish` (trusted publishing + provenance; skips if already published/staged), then GitHub Release from the changelog section.
+- The staged version goes live only after `npm stage approve` (2FA) by a maintainer.
+
+## Demo app (`demo/`)
 
 - `src/routes/+page.svelte`: single-page demo/playground (~860 lines) — interactive controls (shadcn-svelte/bits-ui components in `src/lib/components/ui/`), export buttons.
-- `src/routes/+page.server.ts`: renders the root `README.md` to HTML via remark/rehype + shiki, strips the badge line.
-- Static adapter; `build:demo` sets `BASE_PATH=/svelte-asciiart` (GitHub Pages).
+- `src/routes/+page.server.ts`: renders the root `README.md` (`resolve('..', 'README.md')` — cwd is `demo/`) to HTML via remark/rehype + shiki, strips the badge line.
+- Vite aliases `svelte-asciiart` to `../packages/svelte-asciiart/src/lib/index.ts` (live source, not dist).
+- Static adapter; `build:demo` sets `BASE_PATH=/svelte-asciiart`; Pages workflow uploads `demo/build`.
 - Tailwind 4; shared styles in `src/routes/layout.css`.
-- `src/routes/test/` is an empty leftover directory.
