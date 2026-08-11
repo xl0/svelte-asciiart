@@ -2,14 +2,14 @@
 
 ## Goal
 
-Publish a Svelte 5 component (`AsciiArt`) that renders ASCII art as scalable SVG (optional grid + frame), plus a SvelteKit demo app in the repo root.
+Publish a Svelte 5 component (`AsciiArt`) that renders ASCII art as scalable SVG (optional grid + frame), plus a SvelteKit demo app in `demo/`.
 
 ## Plan
 
 - [x] Monorepo layout: thin root + `demo/` app + `packages/svelte-asciiart` library package
 - [x] Implement `AsciiArt` (`packages/svelte-asciiart/src/lib/AsciiArt.svelte`)
 - [x] Export `AsciiArt` from `packages/svelte-asciiart/src/lib/index.ts`
-- [x] Package unit tests (`packages/svelte-asciiart/src/lib/AsciiArt.test.ts`, 14 tests)
+- [x] Package unit tests: component (`AsciiArt.test.ts`) + export utils (`utils.test.ts`), 24 tests
 - [x] Demo page (`demo/src/routes/+page.svelte`)
 - [x] SVG/PNG export utilities (`exportSvg`, `exportSvgToPng`, `svgStringToPng`)
 
