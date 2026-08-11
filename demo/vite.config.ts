@@ -15,9 +15,6 @@ export default defineConfig({
 		}
 	},
 	resolve: {
-		alias: {
-			'svelte-asciiart': path.resolve('../packages/svelte-asciiart/src/lib/index.ts')
-		},
 		conditions: ['browser']
 	}
 });
