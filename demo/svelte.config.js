@@ -18,6 +18,11 @@ const config = {
 		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
+		// Resolve the workspace dep to its source (not dist) for vite and
+		// svelte-check alike — dist is gitignored and may not exist.
+		alias: {
+			'svelte-asciiart': '../packages/svelte-asciiart/src/lib/index.ts'
+		},
 		paths: {
 			base: process.env.BASE_PATH ?? ''
 		}
