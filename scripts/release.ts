@@ -74,10 +74,9 @@ if (!/^- /m.test(nextHeading < 0 ? rest : rest.slice(0, nextHeading)))
 	die('[Unreleased] has no entries — run /cl first')
 
 const date = new Date().toISOString().slice(0, 10)
-await Bun.write(
-	'CHANGELOG.md',
-	changelog.replace(`${heading}\n`, `${heading}\n\n## [${version}] - ${date}\n`)
-)
+const rolled = changelog.replace(`${heading}\n`, `${heading}\n\n## [${version}] - ${date}\n`)
+if (rolled === changelog) die('could not roll [Unreleased] over in CHANGELOG.md')
+await Bun.write('CHANGELOG.md', rolled)
 
 const bumped = pkgText.replace(`"version": "${current}"`, `"version": "${version}"`)
 if (bumped === pkgText) die(`could not rewrite the version in ${pkgPath}`)
