@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- MIT `LICENSE`, shipped in the npm package alongside the README.
+- Package metadata: `description`, `license`, `author`.
+
 ## [0.0.5] - 2025-12-31
 
 ### Added
