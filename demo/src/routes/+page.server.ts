@@ -9,7 +9,7 @@ import rehypeShiki from '@shikijs/rehype';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-	const readmePath = resolve('README.md');
+	const readmePath = resolve('..', 'README.md');
 	let readmeContent = readFileSync(readmePath, 'utf-8');
 
 	// Skip the specific badge line
