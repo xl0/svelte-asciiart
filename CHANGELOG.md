@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-08-13
+
 ### Added
 
 - ANSI color support: `text` containing SGR escapes is parsed automatically (16-color, 256-color, truecolor foregrounds **and backgrounds**; bold, dim, italic, underline, strikethrough, inverse; state persists across lines). 16-color codes map to `ansi-*` CSS classes themeable via `--ansi-fg-*`/`--ansi-bg-*` custom properties. Backgrounds render as full-cell rects behind the text; inverse swaps fg/bg (`--ansi-default-bg` fills in for a missing side); blink emits a class without default styling.

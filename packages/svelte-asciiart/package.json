@@ -1,6 +1,6 @@
 {
 	"name": "svelte-asciiart",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Render ASCII art as a crisp, styleable SVG character grid in Svelte 5, with SVG/PNG export",
 	"license": "MIT",
 	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
