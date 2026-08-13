@@ -8,10 +8,7 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), devtoolsJson()],
 	server: {
 		fs: {
-			allow: [
-				path.resolve('../packages/svelte-asciiart/dist'),
-				path.resolve('../packages/svelte-asciiart/src')
-			]
+			allow: [path.resolve('../packages/svelte-asciiart/dist'), path.resolve('../packages/svelte-asciiart/src')]
 		}
 	},
 	resolve: {

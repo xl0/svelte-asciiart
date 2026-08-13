@@ -3,12 +3,12 @@
 Maintain 2 important files in sync with the codebase:
 
 - `CODE.md`: An in-depth summary of the current state of the codebase.
-The file should contain high-level view of the code and only non-obvious implementation details. Don't overload it with small details.
+  The file should contain high-level view of the code and only non-obvious implementation details. Don't overload it with small details.
 
 - `PLAN.md`: High-level plan in plain English, followed by TODO with [x] boxes.
-TODO items may be sections (## [x] Section) or paragraphs - don't make it rigid.
-Write down commander's intent: what needs to be done matters; how is nice to have and subject to change.
-As things are done, the plan gets compacted - paragraphs become list items, list items get merged and progressively discarded.
+  TODO items may be sections (## [x] Section) or paragraphs - don't make it rigid.
+  Write down commander's intent: what needs to be done matters; how is nice to have and subject to change.
+  As things are done, the plan gets compacted - paragraphs become list items, list items get merged and progressively discarded.
 
 IMPORTANT: At the start of each conversation, always fully read `CODE.md`. You may read `PLAN.md` when relevant to the task.
 Update the files as you go, keep the updates concise. Not a changelog - content reflects the current state, not history.
@@ -50,7 +50,7 @@ Don't put too much on one line, keep things readable.
 
 ### Git
 
-- Don't commit, unless the user explicitly instructed you. Our default workflow is work work work (often user in the loop), then test, often manually, then commit. The user may override this.  
+- Don't commit, unless the user explicitly instructed you. Our default workflow is work work work (often user in the loop), then test, often manually, then commit. The user may override this.
 - When you commit, it's possible that the worktree contains unrelated changes and untracked files. Don't blindly add files - only commit what's necessary.
 - **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.
 
@@ -58,7 +58,7 @@ Don't put too much on one line, keep things readable.
 
 **Does this need to exist at all?** Speculative need = skip it, say so in one line. (YAGNI)
 
-**Bug fix = root cause, not symptom.** 
+**Bug fix = root cause, not symptom.**
 
 ## Rules
 
@@ -92,7 +92,7 @@ If documentation exists for a library you're about to use, always read the relev
 
 - Always use bun/bunx, not npm
 - You may install packages, double-check with the user if in doubt.
-- If  project is using shadcn, prefer installing shadcn components over hand-rolled replacements.
+- If project is using shadcn, prefer installing shadcn components over hand-rolled replacements.
 
 ### Running the checks
 

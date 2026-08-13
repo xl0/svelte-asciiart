@@ -1,6 +1,7 @@
 ---
 description: Audit changelog entries before a release
 ---
+
 Audit `## [Unreleased]` in `CHANGELOG.md` against every commit since the last
 release. Do not bump, commit, tag or push — `bun run release` does all of that.
 
@@ -24,9 +25,13 @@ Demo-only changes do not get entries.
      if missing.
    - Consolidate related commits into a single entry. Describe the change from a
      consumer's point of view; do not transcribe commit messages.
+   - You may rephrase or rewrite existing entries.
 
 4. **Format:**
-   - One entry per line, never hard-wrapped.
+   - One entry per line, never hard-wrapped. Imperative, naming the
+     user-visible behavior.
+   - No bug mechanism, no before/after narrative, no future plans — git
+     history and CODE.md carry those.
    - Sections in this order, omitting the ones that do not apply:
      `Breaking Changes`, `Added`, `Changed`, `Fixed`, `Removed`.
 

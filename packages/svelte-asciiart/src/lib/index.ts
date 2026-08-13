@@ -4,6 +4,8 @@ export {
 	exportSvg,
 	exportSvgToPng,
 	svgStringToPng,
+	collectFontCss,
+	fmt,
 	type ExportSvgOptions,
 	type ExportPngOptions,
 	type SvgStringToPngOptions
