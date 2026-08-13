@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import AsciiArt from './AsciiArt.svelte';
-import { exportSvg, svgStringToPng, exportSvgToPng } from './utils.js';
+import { exportSvg, svgStringToPng, exportSvgToPng, collectFontCss } from './utils.js';
 
 const getSvg = (container: HTMLElement) => container.querySelector('svg') as SVGSVGElement;
 
@@ -112,6 +112,35 @@ describe('exportSvg', () => {
 		const { container } = await render(AsciiArt, { text: 'AB' });
 		const doc = new DOMParser().parseFromString(exportSvg(getSvg(container)), 'image/svg+xml');
 		expect(doc.documentElement.querySelector('rect')).toBeNull();
+	});
+});
+
+describe('collectFontCss', () => {
+	it('embeds @font-face src as a data: URI for families the svg uses', async () => {
+		const face = document.createElement('style');
+		// dummy woff2 payload; collectFontCss only fetches and re-encodes it
+		face.textContent =
+			'@font-face { font-family: TestMono; src: url(data:font/woff2;base64,AAECAw==); }';
+		document.head.appendChild(face);
+		const wrap = document.createElement('div');
+		wrap.style.setProperty('--ascii-font-family', 'TestMono, monospace');
+		document.body.appendChild(wrap);
+		try {
+			const { container } = await render(AsciiArt, { text: 'Hi' });
+			wrap.appendChild(container);
+			const css = await collectFontCss(getSvg(container));
+			expect(css).toContain('@font-face');
+			expect(css).toContain('font-family: TestMono');
+			expect(css).toContain('src: url(data:');
+		} finally {
+			face.remove();
+			wrap.remove();
+		}
+	});
+
+	it('returns nothing for system-font stacks', async () => {
+		const { container } = await render(AsciiArt, { text: 'Hi' });
+		expect(await collectFontCss(getSvg(container))).toBe('');
 	});
 });
 

@@ -198,14 +198,73 @@ const fontDataCache = new Map<string, Promise<string>>();
 
 const unquote = (s: string) => s.trim().replace(/^["']|["']$/g, '');
 
+interface FontFaceSource {
+	rule: CSSFontFaceRule;
+	/** URL relative urls in the rule's src resolve against */
+	base: string;
+}
+
+// @import url resolution ceiling — imports of imports of imports is already
+// exotic; deeper is a cycle or abuse
+const MAX_IMPORT_DEPTH = 3;
+const IMPORT_RE = /@import\s+(?:url\(\s*)?["']?([^"')\s;]+)/g;
+
+/** Walk a rule list, collecting @font-face rules and following @import. */
+async function sheetFaces(
+	rules: CSSRuleList,
+	base: string,
+	depth: number,
+	out: FontFaceSource[]
+): Promise<void> {
+	for (const rule of Array.from(rules)) {
+		if (rule instanceof CSSFontFaceRule) out.push({ rule, base });
+		else if (rule instanceof CSSImportRule && depth < MAX_IMPORT_DEPTH) {
+			let child: CSSRuleList | undefined;
+			try {
+				child = rule.styleSheet?.cssRules;
+			} catch {
+				// cross-origin import — fall through to the fetch path
+			}
+			if (child) await sheetFaces(child, rule.styleSheet!.href ?? base, depth + 1, out);
+			else await fetchedFaces(new URL(rule.href, base).href, depth + 1, out);
+		}
+	}
+}
+
+/**
+ * Collect @font-face rules from a stylesheet the CSSOM won't show us
+ * (cross-origin): fetch the text and parse it in a constructed sheet.
+ * Constructed sheets silently drop @import rules, so imports are re-extracted
+ * from the raw text and followed by fetch.
+ */
+async function fetchedFaces(href: string, depth: number, out: FontFaceSource[]): Promise<void> {
+	try {
+		let text = sheetTextCache.get(href);
+		if (!text) {
+			text = fetch(href).then((r) => r.text());
+			sheetTextCache.set(href, text);
+		}
+		const css = await text;
+		const parsed = new CSSStyleSheet();
+		parsed.replaceSync(css);
+		await sheetFaces(parsed.cssRules, href, depth, out);
+		if (depth < MAX_IMPORT_DEPTH)
+			for (const m of css.matchAll(IMPORT_RE))
+				await fetchedFaces(new URL(m[1], href).href, depth + 1, out);
+	} catch {
+		sheetTextCache.delete(href);
+	}
+}
+
 /**
  * Collect `@font-face` rules for the font families the SVG's text uses, with
  * the font files inlined as data: URIs. Rasterizing an SVG via `new Image()`
  * happens in an isolated document that cannot load external fonts, so PNG
  * export needs this; pass the result to `exportSvg`'s `extraCss` to make an
  * SVG export font-standalone too. Cross-origin stylesheets (e.g. Google
- * Fonts) block CSSOM access and are re-fetched as text instead. Families
- * without a reachable @font-face (system fonts) contribute nothing.
+ * Fonts) block CSSOM access and are re-fetched as text instead; @import
+ * chains are followed either way. Families without a reachable @font-face
+ * (system fonts) contribute nothing.
  */
 export async function collectFontCss(svgEl: SVGSVGElement): Promise<string> {
 	const textEl = svgEl.querySelector('text') ?? svgEl;
@@ -215,35 +274,17 @@ export async function collectFontCss(svgEl: SVGSVGElement): Promise<string> {
 			.map((f) => unquote(f).toLowerCase())
 	);
 
-	const faces: { rule: CSSFontFaceRule; base: string }[] = [];
+	const all: FontFaceSource[] = [];
 	for (const sheet of Array.from(document.styleSheets)) {
-		let rules: CSSRuleList;
 		try {
-			rules = sheet.cssRules;
+			await sheetFaces(sheet.cssRules, sheet.href ?? document.baseURI, 0, all);
 		} catch {
-			// cross-origin sheet: re-fetch and parse in a constructed sheet
-			if (!sheet.href) continue;
-			const href = sheet.href;
-			try {
-				let text = sheetTextCache.get(href);
-				if (!text) {
-					text = fetch(href).then((r) => r.text());
-					sheetTextCache.set(href, text);
-				}
-				const parsed = new CSSStyleSheet();
-				parsed.replaceSync(await text);
-				rules = parsed.cssRules;
-			} catch {
-				sheetTextCache.delete(sheet.href);
-				continue;
-			}
-		}
-		for (const rule of Array.from(rules)) {
-			if (!(rule instanceof CSSFontFaceRule)) continue;
-			const family = unquote(rule.style.getPropertyValue('font-family')).toLowerCase();
-			if (families.has(family)) faces.push({ rule, base: sheet.href ?? document.baseURI });
+			if (sheet.href) await fetchedFaces(sheet.href, 1, all);
 		}
 	}
+	const faces = all.filter(({ rule }) =>
+		families.has(unquote(rule.style.getPropertyValue('font-family')).toLowerCase())
+	);
 
 	const cssFaces = await Promise.all(
 		faces.map(async ({ rule, base }) => {
