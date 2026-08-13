@@ -152,6 +152,16 @@ describe('ansiToSpans', () => {
 		expect(ansiToSpans(`${E}_payload${E}\\x`)[0][0].text).toBe('x');
 	});
 
+	it('strips control-string payloads spanning newlines without row breaks', () => {
+		expect(ansiToSpans(`a${E}Pline1\nline2${E}\\b`)).toEqual([
+			[
+				{ text: 'a', class: undefined, fill: undefined },
+				{ text: 'b', class: undefined, fill: undefined }
+			]
+		]);
+		expect(ansiToSpans(`${E}]0;ti\ntle${E}\\after\nnext`).length).toBe(2);
+	});
+
 	it('strips OSC sequences (BEL- or ST-terminated)', () => {
 		expect(ansiToSpans(`${E}]8;;https://ex.com${E}\\link${E}]8;;${E}\\`)[0][0].text).toBe('link');
 		expect(ansiToSpans(`${E}]0;title\x07after`)[0][0].text).toBe('after');

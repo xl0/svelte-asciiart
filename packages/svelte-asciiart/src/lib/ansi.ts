@@ -175,47 +175,61 @@ const C0_RE = /[\x00-\x09\x0b-\x1f\x7f]/;
  * blink, strikethrough; inverse (rendered as a fg/bg swap); resets. Unknown
  * codes are consumed without effect; non-SGR escapes are stripped. Tabs are
  * expanded to 8-column stops; other C0 controls are dropped.
+ *
+ * Escapes are matched over the whole text, not per line: control-string
+ * payloads (OSC/DCS/APC/PM/SOS) may legally contain newlines, which must not
+ * become row breaks. Rows split only on `\r?\n` in plain chunks.
  */
 export function ansiToSpans(text: string): Span[][] {
 	const state: SgrState = { attrs: new Set() };
-	return text.split(/\r?\n/).map((line) => {
-		const spans: Span[] = [];
-		// column tracking (a segmentation pass per chunk) is only paid on
-		// lines that actually contain a tab
-		const hasTab = line.includes('\t');
-		let col = 0;
-		const push = (chunk: string) => {
-			if (C0_RE.test(chunk)) {
-				let out = '';
-				for (const part of chunk.split(/([\x00-\x09\x0b-\x1f\x7f])/)) {
-					if (part === '\t') {
-						const n = 8 - (col % 8);
-						out += ' '.repeat(n);
-						col += n;
-					} else if (part.length === 1 && C0_RE.test(part)) continue;
-					else {
-						out += part;
-						if (hasTab) col += displayWidth(part);
-					}
+	const rows: Span[][] = [[]];
+	let row = rows[0];
+	// display column, tracked lazily: computed from the row's spans at the
+	// first tab, then kept incrementally — tab-free rows never pay the
+	// displayWidth (segmentation) pass
+	let col: number | null = null;
+	const emit = (chunk: string) => {
+		if (C0_RE.test(chunk)) {
+			let out = '';
+			for (const part of chunk.split(/([\x00-\x09\x0b-\x1f\x7f])/)) {
+				if (part === '\t') {
+					col ??= row.reduce((w, s) => w + displayWidth(s.text), 0) + displayWidth(out);
+					const n = 8 - (col % 8);
+					out += ' '.repeat(n);
+					col += n;
+				} else if (part.length === 1 && C0_RE.test(part)) continue;
+				else {
+					out += part;
+					if (col !== null) col += displayWidth(part);
 				}
-				chunk = out;
-			} else if (hasTab) col += displayWidth(chunk);
-			// combining marks / joiners split off their base glyph by an escape
-			// belong to the previous span, so the grapheme stays one cluster
-			const zw = chunk.match(LEADING_ZERO_WIDTH);
-			if (zw && spans.length) {
-				spans[spans.length - 1].text += zw[0];
-				chunk = chunk.slice(zw[0].length);
 			}
-			if (chunk) spans.push({ text: chunk, ...styleOf(state) });
-		};
-		let pos = 0;
-		for (const m of line.matchAll(ESCAPE_RE)) {
-			push(line.slice(pos, m.index));
-			pos = m.index + m[0].length;
-			if (m[1] !== undefined) applySgr(state, m[1].split(';').map(Number));
+			chunk = out;
+		} else if (col !== null) col += displayWidth(chunk);
+		// combining marks / joiners split off their base glyph by an escape
+		// belong to the previous span, so the grapheme stays one cluster
+		const zw = chunk.match(LEADING_ZERO_WIDTH);
+		if (zw && row.length) {
+			row[row.length - 1].text += zw[0];
+			chunk = chunk.slice(zw[0].length);
 		}
-		push(line.slice(pos));
-		return spans;
-	});
+		if (chunk) row.push({ text: chunk, ...styleOf(state) });
+	};
+	const plain = (seg: string) => {
+		const parts = seg.split(/\r?\n/);
+		emit(parts[0]);
+		for (let i = 1; i < parts.length; i++) {
+			row = [];
+			rows.push(row);
+			col = null;
+			emit(parts[i]);
+		}
+	};
+	let pos = 0;
+	for (const m of text.matchAll(ESCAPE_RE)) {
+		plain(text.slice(pos, m.index));
+		pos = m.index + m[0].length;
+		if (m[1] !== undefined) applySgr(state, m[1].split(';').map(Number));
+	}
+	plain(text.slice(pos));
+	return rows;
 }
