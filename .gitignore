@@ -22,3 +22,8 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local AI docs cache and scratch
+/lovely-docs/
+/.lovely-docs.yaml
+/archive/

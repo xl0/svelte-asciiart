@@ -6,9 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 .ascii-font-system {
-	--ascii-font-family:
-		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-		monospace;
+	--ascii-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 .ascii-font-jetbrains {
 	--ascii-font-family: 'JetBrains Mono', ui-monospace, monospace;

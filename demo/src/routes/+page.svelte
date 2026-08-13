@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { AsciiArt, exportSvg, exportSvgToPng } from 'svelte-asciiart';
+	import { AsciiArt, exportSvg, exportSvgToPng, fmt } from 'svelte-asciiart';
+	import { untrack } from 'svelte';
 	import type { PageData } from './$types';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Switch } from '$lib/components/ui/switch';
@@ -22,7 +23,15 @@
 		{ value: 'dashdot', label: 'Dash-dot -·-·-' }
 	] as const;
 
-	const monoFonts = [
+	interface MonoFont {
+		key: string;
+		label: string;
+		family: string;
+		/** Google Fonts css2 family slug — set for fonts loaded from Google Fonts */
+		gf?: string;
+	}
+
+	const monoFonts: MonoFont[] = [
 		{
 			key: 'system',
 			label: 'System',
@@ -31,20 +40,32 @@
 		{
 			key: 'jetbrains',
 			label: 'JetBrains Mono',
-			family: '"JetBrains Mono", ui-monospace, monospace'
+			family: '"JetBrains Mono", ui-monospace, monospace',
+			gf: 'JetBrains+Mono:wght@400;600'
 		},
-		{ key: 'fira', label: 'Fira Code', family: '"Fira Code", ui-monospace, monospace' },
+		{
+			key: 'fira',
+			label: 'Fira Code',
+			family: '"Fira Code", ui-monospace, monospace',
+			gf: 'Fira+Code:wght@400;600'
+		},
 		{
 			key: 'source',
 			label: 'Source Code Pro',
-			family: '"Source Code Pro", ui-monospace, monospace'
+			family: '"Source Code Pro", ui-monospace, monospace',
+			gf: 'Source+Code+Pro:wght@400;600'
 		},
-		{ key: 'plex', label: 'IBM Plex Mono', family: '"IBM Plex Mono", ui-monospace, monospace' },
+		{
+			key: 'plex',
+			label: 'IBM Plex Mono',
+			family: '"IBM Plex Mono", ui-monospace, monospace',
+			gf: 'IBM+Plex+Mono:wght@400;600'
+		},
 		{ key: 'courier', label: 'Courier New', family: '"Courier New", Courier, monospace' },
 		{ key: 'consolas', label: 'Consolas', family: 'Consolas, "Liberation Mono", monospace' },
 		{ key: 'menlo', label: 'Menlo', family: 'Menlo, Monaco, monospace' },
 		{ key: 'monaco', label: 'Monaco', family: 'Monaco, monospace' }
-	] as const;
+	];
 
 	const defaultFontKey = monoFonts[0].key;
 
@@ -62,17 +83,19 @@
 		}
 	}
 
-	function fmt(n: number, digits = 3): string {
-		if (!Number.isFinite(n)) return String(n);
-		if (Math.abs(n) < 1e-12) return '0';
-		const s = n.toFixed(digits);
-		return s.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
-	}
-
 	const defaultArt = `+----------+	   _o<
 |  Hello   |	  \`\\\,_
 |  World!  |	(_)/ (_)
 +----------+`;
+
+	const ansiArt = [
+		'\x1b[36m┌────────────────┐\x1b[0m',
+		'\x1b[36m│\x1b[0m  \x1b[1;33m★\x1b[0m \x1b[1mANSI art\x1b[0m \x1b[1;33m★\x1b[0m  \x1b[36m│\x1b[0m',
+		'\x1b[36m│\x1b[0m \x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[94mblue\x1b[0m \x1b[36m│\x1b[0m',
+		'\x1b[36m│\x1b[0m \x1b[38;5;208m256\x1b[0m \x1b[38;2;255;105;180mtruecolor\x1b[0m  \x1b[36m│\x1b[0m',
+		'\x1b[36m│\x1b[0m \x1b[43;30mbg\x1b[0m \x1b[7minverse\x1b[0m     \x1b[36m│\x1b[0m',
+		'\x1b[36m└────────────────┘\x1b[0m'
+	].join('\n');
 
 	let text = $state(defaultArt);
 	let frame = $state(true);
@@ -86,7 +109,7 @@
 	let marginRight = $state(2);
 	let marginBottom = $state(1);
 	let marginLeft = $state(2);
-	let fontKey = $state<(typeof monoFonts)[number]['key']>(defaultFontKey);
+	let fontKey = $state(defaultFontKey);
 
 	let gridStroke = $state('#87CEFA');
 	let gridStrokeWidth = $state(0.03);
@@ -124,72 +147,63 @@
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
 
-	// Touch all reactive inputs that affect the rendered SVG
-	const touchInputs = () =>
-		void [
-			text,
-			showGrid,
-			frame,
-			cellAspect,
-			frameMargin,
-			gridStroke,
-			gridStrokeWidth,
-			gridOpacity,
-			frameStroke,
-			frameStrokeWidth,
-			gridDashArray,
-			frameDashArray,
-			bgColor,
-			fillColor,
-			strokeColor,
-			strokeWidth,
-			bold,
-			fontFamily,
-			rowsProp,
-			colsProp,
-			baseSize
-		];
+	// Export views render only while Bind SVG is on — the switch that controls
+	// showExport lives inside the bindSvg block, so gate on both.
+	const exportOn = $derived(bindSvg && showExport);
 
-	// Auto-generate PNG preview when showExport is on and SVG or styles change (debounced)
+	// Debounced trigger shared by all export views: codePreview reads every
+	// control that affects the render, so its debounced copy (set below, after
+	// codePreview is defined) doubles as the invalidation signal — no
+	// hand-maintained dependency list.
+	let debouncedPreview = $state<string | null>(null);
+
+	// Auto-generate the PNG preview on the debounced trigger
 	let pngPreviewUrl = $state<string | null>(null);
+	let pngGen = 0;
 	$effect(() => {
-		if (!svg || !showExport) {
+		if (!svg || !exportOn) {
 			if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
 			pngPreviewUrl = null;
 			return;
 		}
-		touchInputs();
-
-		// Capture values before timeout
+		void debouncedPreview;
 		const svgEl = svg;
-		const bg = bgColor;
-
-		const timeout = setTimeout(async () => {
+		// untrack: bgColor changes already arrive via debouncedPreview; a direct
+		// dependency would regenerate undebounced on every color-drag tick
+		const bg = untrack(() => bgColor);
+		// export duration varies (font fetches) — the generation token keeps a
+		// slow older render from overwriting a newer one
+		const gen = ++pngGen;
+		void (async () => {
 			try {
-				const blob = await exportSvgToPng(svgEl, { includeBackground: true, backgroundColor: bg, output: 'blob' });
+				const blob = await exportSvgToPng(svgEl, {
+					includeBackground: true,
+					backgroundColor: bg,
+					output: 'blob'
+				});
+				if (gen !== pngGen) return;
 				if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
 				pngPreviewUrl = URL.createObjectURL(blob);
 			} catch (e) {
 				console.error('Failed to generate PNG:', e);
+				if (gen !== pngGen) return;
 				if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
 				pngPreviewUrl = null;
 			}
-		}, 200);
-
-		return () => clearTimeout(timeout);
+		})();
 	});
 
-	// Derived SVG exports for display
+	// Derived SVG exports for display, on the same debounced trigger
 	const svgRaw = $derived.by(() => {
-		if (!svg || !showExport) return null;
-		touchInputs();
+		if (!svg || !exportOn) return null;
+		void debouncedPreview;
 		return svg.outerHTML;
 	});
 
 	const svgStyled = $derived.by(() => {
-		if (!svg || !showExport) return null;
-		touchInputs();
-		return exportSvg(svg, { includeBackground: true, backgroundColor: bgColor });
+		if (!svg || !exportOn) return null;
+		void debouncedPreview;
+		return exportSvg(svg, { includeBackground: true, backgroundColor: untrack(() => bgColor) });
 	});
 
 	function buildMarginProp(): string {
@@ -251,21 +265,7 @@
 	}
 
 	function buildFontHead(): string {
-		let gfFamily = '';
-		switch (fontKey) {
-			case 'jetbrains':
-				gfFamily = 'JetBrains+Mono:wght@400;600';
-				break;
-			case 'fira':
-				gfFamily = 'Fira+Code:wght@400;600';
-				break;
-			case 'source':
-				gfFamily = 'Source+Code+Pro:wght@400;600';
-				break;
-			case 'plex':
-				gfFamily = 'IBM+Plex+Mono:wght@400;600';
-				break;
-		}
+		const gfFamily = monoFonts.find((f) => f.key === fontKey)?.gf;
 		if (!gfFamily) return '';
 		return [
 			'<svelte:head>',
@@ -280,7 +280,8 @@
 	}
 
 	let codePreview = $derived.by(() => {
-		const escapedText = text.replace(/`/g, '\\`');
+		// escape everything a template literal interprets: \, ` and ${
+		const escapedText = text.replace(/[\\`]|\$\{/g, (m) => '\\' + m);
 		const marginProp = buildMarginProp();
 		const classProp = buildClassProp();
 		const fontCss = buildFontCss();
@@ -291,7 +292,7 @@
 			lines.push('');
 		}
 		lines.push('<script lang="ts">');
-		if (bindSvg && showExport) {
+		if (exportOn) {
 			lines.push("  import { AsciiArt, exportSvg, exportSvgToPng } from 'svelte-asciiart';");
 		} else {
 			lines.push("  import { AsciiArt } from 'svelte-asciiart';");
@@ -314,15 +315,15 @@
 		if (classProp) lines.push(classProp.slice(1));
 		if (showGrid) lines.push('  gridClass="ascii-grid"');
 		if (frame) lines.push('  frameClass="ascii-frame"');
-		if (showExport && baseSize !== 50) lines.push(`  baseSize={${baseSize}}`);
+		if (exportOn && baseSize !== 50) lines.push(`  baseSize={${baseSize}}`);
 		lines.push('/>');
-		if (bindSvg && !showExport) {
+		if (bindSvg && !exportOn) {
 			lines.push('');
 			lines.push('{#if svg}');
 			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
 			lines.push('{/if}');
 		}
-		if (bindSvg && showExport) {
+		if (exportOn) {
 			lines.push('');
 			lines.push('{#if svg}');
 			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
@@ -381,7 +382,14 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	let highlightedCode = $derived(await codeToHtml(codePreview, { lang: 'svelte', theme: 'github-dark' }));
+	// Set the shared debounced trigger: gates the Shiki re-highlight and all
+	// export views off per-keystroke/slider-tick recomputation
+	$effect(() => {
+		const code = codePreview;
+		const timeout = setTimeout(() => (debouncedPreview = code), 150);
+		return () => clearTimeout(timeout);
+	});
+	let highlightedCode = $derived(await codeToHtml(debouncedPreview ?? codePreview, { lang: 'svelte', theme: 'github-dark' }));
 	let highlightedInstall = $derived(await codeToHtml('npm install svelte-asciiart', { lang: 'bash', theme: 'github-dark' }));
 
 	let exampleCodeEl: HTMLDivElement | null = null;
@@ -390,18 +398,11 @@
 
 	async function copySvgRaw() {
 		if (!svg) return;
-		const markup = svg.outerHTML;
 		try {
-			await navigator.clipboard.writeText(markup);
-		} catch {
-			const ta = document.createElement('textarea');
-			ta.value = markup;
-			ta.style.position = 'fixed';
-			ta.style.left = '-99999px';
-			document.body.append(ta);
-			ta.select();
-			document.execCommand('copy');
-			ta.remove();
+			await navigator.clipboard.writeText(svg.outerHTML);
+		} catch (e) {
+			console.error('Failed to copy SVG:', e);
+			return;
 		}
 		copiedSvgRaw = true;
 		if (copiedSvgRawTimeout) clearTimeout(copiedSvgRawTimeout);
@@ -412,18 +413,11 @@
 
 	async function copySvgWithStyles() {
 		if (!svg) return;
-		const markup = exportSvg(svg, { includeBackground: true, backgroundColor: bgColor });
 		try {
-			await navigator.clipboard.writeText(markup);
-		} catch {
-			const ta = document.createElement('textarea');
-			ta.value = markup;
-			ta.style.position = 'fixed';
-			ta.style.left = '-99999px';
-			document.body.append(ta);
-			ta.select();
-			document.execCommand('copy');
-			ta.remove();
+			await navigator.clipboard.writeText(exportSvg(svg, { includeBackground: true, backgroundColor: bgColor }));
+		} catch (e) {
+			console.error('Failed to copy SVG:', e);
+			return;
 		}
 		copiedSvgStyles = true;
 		if (copiedSvgStylesTimeout) clearTimeout(copiedSvgStylesTimeout);
@@ -451,15 +445,9 @@
 	async function copyExampleCode() {
 		try {
 			await navigator.clipboard.writeText(codePreview);
-		} catch {
-			const ta = document.createElement('textarea');
-			ta.value = codePreview;
-			ta.style.position = 'fixed';
-			ta.style.left = '-99999px';
-			document.body.append(ta);
-			ta.select();
-			document.execCommand('copy');
-			ta.remove();
+		} catch (e) {
+			console.error('Failed to copy code:', e);
+			return;
 		}
 		copied = true;
 		if (copiedTimeout) clearTimeout(copiedTimeout);
@@ -526,7 +514,7 @@
 							<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
 						</div>
 
-						{#if showExport}
+						{#if exportOn}
 							<div class="w-fit space-y-2">
 								<Label for="base-size" class="text-xs whitespace-nowrap text-muted-foreground">Base Size</Label>
 								<Input
@@ -743,7 +731,7 @@
 					margin={frameMargin}
 					gridClass={showGrid ? 'ascii-grid' : ''}
 					frameClass={frame ? 'ascii-frame' : ''}
-					baseSize={showExport ? baseSize : undefined} />
+					baseSize={exportOn ? baseSize : undefined} />
 			</div>
 
 			{#if bindSvg}
@@ -751,7 +739,7 @@
 					<Button variant="outline" onclick={copySvgRaw} disabled={!svg} size="sm">
 						{copiedSvgRaw ? 'Copied!' : 'Copy SVG'}
 					</Button>
-					{#if showExport}
+					{#if exportOn}
 						<Button variant="outline" onclick={copySvgWithStyles} disabled={!svg} size="sm">
 							{copiedSvgStyles ? 'Copied!' : 'Copy SVG + Styles'}
 						</Button>
@@ -762,7 +750,7 @@
 				</div>
 			{/if}
 
-			{#if showExport}
+			{#if exportOn}
 				{#if pngPreviewUrl}
 					<div class="space-y-2">
 						<Label class="text-sm font-medium text-muted-foreground">PNG Export Preview</Label>
@@ -823,6 +811,22 @@
 				</Card.Content>
 			</Card.Root>
 		</div>
+	</div>
+
+	<div class="mt-12 flex justify-center">
+		<Card.Root class="w-full max-w-6xl">
+			<Card.Content class="space-y-4 p-6 sm:p-10">
+				<h2 class="text-lg font-semibold">ANSI colors</h2>
+				<p class="text-sm text-muted-foreground">
+					Text with ANSI SGR escapes is parsed automatically — 16-color (themeable via
+					<code>--ansi-fg-*</code>
+					CSS variables), 256-color and truecolor.
+				</p>
+				<div class="mx-auto max-w-sm">
+					<AsciiArt text={ansiArt} />
+				</div>
+			</Card.Content>
+		</Card.Root>
 	</div>
 
 	{#if data.renderedReadme}

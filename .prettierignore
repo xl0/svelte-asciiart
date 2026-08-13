@@ -5,5 +5,14 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Build output
+/packages/svelte-asciiart/dist/
+
 # Miscellaneous
 /demo/static/
+/.claude/
+/archive/
+/lovely-docs/
+
+# Vendored shadcn-svelte components — keep upstream formatting
+/demo/src/lib/components/ui/

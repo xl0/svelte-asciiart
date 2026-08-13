@@ -29,7 +29,9 @@ npm install svelte-asciiart
 
 | Prop         | Type                                                             | Default  | Description                                                   |
 | ------------ | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------- |
-| `text`       | `string`                                                         | required | The ASCII art text to render                                  |
+| `text`       | `string`                                                         | `''`     | The ASCII art text to render; may contain ANSI SGR escapes    |
+| `fontSize`   | `number`                                                         | `1`      | Glyph size as a fraction of the cell height                   |
+| `cellSize`   | `number`                                                         | -        | Pixels per cell; renders at fixed scale instead of stretching |
 | `rows`       | `number`                                                         | auto     | Frame rows (content can overflow into the margin)             |
 | `cols`       | `number`                                                         | auto     | Frame columns (content can overflow into the margin)          |
 | `grid`       | `boolean`                                                        | `false`  | Draw grid lines for the full viewBox (frame + margin)         |
@@ -62,6 +64,29 @@ Grid mode renders text character-by-character in a precise grid, useful for ASCI
 </style>
 ```
 
+## Colors
+
+`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets. Style state persists across lines, unknown codes and non-SGR escapes are stripped. Blink emits an `ansi-blink` class with no default styling — style it from the host if you want it.
+
+Backgrounds paint as full-cell `<rect>`s behind the text, so adjacent runs and rows tile into solid blocks like a terminal. Inverse video swaps foreground and background; with no explicit foreground the glyphs paint in `--ansi-default-bg` (defaults to the `Canvas` system color) — set it to your page background.
+
+The 16 base colors render as CSS classes (`ansi-fg-31`, `ansi-bg-41`, `ansi-bold`, `ansi-dim`, …) backed by custom properties, so the host page can theme them:
+
+```css
+.my-terminal {
+	--ansi-fg-31: #ff5f56; /* red */
+	--ansi-fg-36: #4cd4e0; /* cyan */
+	--ansi-bg-41: #8b1a10; /* red background */
+	--ansi-default-bg: #1e1e1e;
+}
+```
+
+256-color and truecolor values are applied as inline `fill` styles.
+
+Character widths are display-based: CJK and emoji occupy two cells and stay aligned with box-drawing art.
+
+The svg has `role="img"`; pass `aria-label` to describe the art to screen readers.
+
 ## Exporting
 
 The package provides utilities to export styled SVGs and PNGs:
@@ -71,15 +96,15 @@ import { exportSvg, exportSvgToPng } from 'svelte-asciiart';
 
 // Export SVG with computed styles embedded as a <style> block
 const svgMarkup = exportSvg(svgElement, {
-  includeBackground: true,
-  backgroundColor: '#f3f4f6'
+	includeBackground: true,
+	backgroundColor: '#f3f4f6'
 });
 
 // Export to PNG (returns data URL by default)
 const pngDataUrl = await exportSvgToPng(svgElement, {
-  includeBackground: true,
-  backgroundColor: '#f3f4f6',
-  scale: 2 // retina scale factor
+	includeBackground: true,
+	backgroundColor: '#f3f4f6',
+	scale: 2 // retina scale factor
 });
 
 // Export to PNG as Blob
@@ -91,4 +116,3 @@ The `exportSvg` function extracts computed styles from classed elements (e.g., `
 ## License
 
 MIT
-
