@@ -22,10 +22,11 @@ via GitHub search), so the breaking window is free.
 
 - Moved ansi/width with all hardened behaviors; segment-first parsing
   (style breakpoints over row text, clusters styled by first code unit);
-  public pipeline parse → layout → render → exportSvg; theme-as-data with
-  `var(--ansi-*, <resolved>)` emission; metrics `{cellAspect, baseline}`
-  as plain inputs (0.6/0.8 defaults); model-based `exportSvg(text, options)`
-  — no DOM. tsc build, node vitest (63 tests).
+  public pipeline parse → layout → render → exportSvg; theme-as-data
+  resolved at parse time into concrete inline styles (no CSS classes/vars —
+  `themeCss` dropped); metrics `{cellAspect, baseline}` as plain inputs
+  (0.6/0.8 defaults); model-based `exportSvg(text, options)` — no DOM.
+  tsc build, node vitest.
 
 ### [x] PNG package `packages/lovely-svg-png`
 
@@ -34,17 +35,23 @@ via GitHub search), so the breaking window is free.
 
 ### [x] Svelte wrapper 0.1.0
 
-- Renders from the core RenderModel; props consolidated to 9
+- Renders from the core RenderModel; props consolidated
   (`grid`/`frame: boolean | string`, `glyphScale`, `cellSize` absorbs
-  baseSize, `cellAspect: number | 'auto'` canvas-measured); dropped
-  `bind:svg` and the auto aria-label (label→img, none→presentation);
-  theme CSS inlined from core `themeCss()`.
+  baseSize, `cellAspect: number | 'auto'` canvas-measured via a
+  ResizeObserver font probe, `theme`); dropped `bind:svg` and the auto
+  aria-label (label→img, none→presentation).
 
 ### [x] Follow-through
 
-- Demo on the new API (model-based export panels, auto-aspect toggle);
-  root README core-first + per-package READMEs (wrapper no longer copies
-  the root one); Breaking Changes changelog; CODE.md restructured.
+- Per-package READMEs (detailed lower-level API + theming docs);
+  Breaking Changes changelog; CODE.md restructured; review fixes applied.
+
+### [x] Demo split into three pages
+
+- `/` component playground (theme editor, snippet generator),
+  `/lovely-ansi-svg` feature gallery + pipeline inspector,
+  `/lovely-svg-png` SVG→PNG with font embedding; shared nav layout,
+  each page renders its package README.
 
 ## Next
 
