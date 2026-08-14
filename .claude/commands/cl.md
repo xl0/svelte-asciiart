@@ -2,11 +2,12 @@
 description: Audit changelog entries before a release
 ---
 
-Audit `## [Unreleased]` in `CHANGELOG.md` against every commit since the last
-release. Do not bump, commit, tag or push — `bun run release` does all of that.
+Audit `## [Unreleased]` in each package changelog (`packages/*/CHANGELOG.md`)
+against every commit since the last release. Do not bump, commit, tag or push —
+`bun run release` does all of that.
 
-The changelog covers the published package (`packages/svelte-asciiart`).
-Demo-only changes do not get entries.
+Each published package has its own changelog; put every entry in the changelog
+of the package it affects. Demo-only changes do not get entries anywhere.
 
 ## Process
 

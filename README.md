@@ -1,16 +1,30 @@
-# svelte-asciiart
+# lovely-ansi-svg
 
 [![](https://alexey.work/badge/)](https://alexey.work?ref=ascii-md)
 
-A Svelte 5 component for rendering ASCII art as scalable SVG with optional grid overlay and frame.
+Render ASCII/ANSI terminal text as crisp, scalable SVG. A small family of packages:
 
-## Installation
+- **[`lovely-ansi-svg`](https://github.com/xl0/svelte-asciiart/tree/master/packages/lovely-ansi-svg)** — the framework-agnostic core: `text → SVG string`. Parses ANSI SGR escapes (16-color, 256-color, truecolor, attributes), lays glyphs out on a monospace cell grid (CJK/emoji width aware), and serializes themeable SVG. No DOM required — works in Node, SSR, workers, CI.
+- **[`svelte-asciiart`](https://github.com/xl0/svelte-asciiart/tree/master/packages/svelte-asciiart)** — a thin Svelte 5 component over the core, with live font measurement and CSS-variable theming.
+- **[`lovely-svg-png`](https://github.com/xl0/svelte-asciiart/tree/master/packages/lovely-svg-png)** — browser-side SVG-string → PNG rasterization with webfonts embedded as `data:` URIs (follows `@import` chains, e.g. Google Fonts). Not ansi-specific.
 
-```sh
-npm install svelte-asciiart
+**[Live demo](https://xl0.github.io/svelte-asciiart/)**
+
+## Quick start
+
+Standalone SVG from any JS:
+
+```ts
+import { exportSvg } from 'lovely-ansi-svg';
+
+const svg = exportSvg('\x1b[36mHello \x1b[1;33mANSI\x1b[0m world', {
+	frame: true,
+	margin: 1,
+	background: '#1e1e1e'
+});
 ```
 
-## Usage
+Svelte component:
 
 ```svelte
 <script>
@@ -25,93 +39,18 @@ npm install svelte-asciiart
 <AsciiArt {text} />
 ```
 
-## Props
-
-| Prop         | Type                                                             | Default  | Description                                                   |
-| ------------ | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------- |
-| `text`       | `string`                                                         | `''`     | The ASCII art text to render; may contain ANSI SGR escapes    |
-| `fontSize`   | `number`                                                         | `1`      | Glyph size as a fraction of the cell height                   |
-| `cellSize`   | `number`                                                         | -        | Pixels per cell; renders at fixed scale instead of stretching |
-| `rows`       | `number`                                                         | auto     | Frame rows (content can overflow into the margin)             |
-| `cols`       | `number`                                                         | auto     | Frame columns (content can overflow into the margin)          |
-| `grid`       | `boolean`                                                        | `false`  | Draw grid lines for the full viewBox (frame + margin)         |
-| `cellAspect` | `number`                                                         | `0.6`    | Character cell width/height ratio                             |
-| `gridClass`  | `string`                                                         | `''`     | CSS class for the grid lines `<path>`                         |
-| `frame`      | `boolean`                                                        | `false`  | Draw a frame `<rect>` around the frame area                   |
-| `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`      | Margin around the frame in grid cells (top/right/bottom/left) |
-| `frameClass` | `string`                                                         | `''`     | CSS class for the frame `<rect>`                              |
-| `svg`        | `SVGSVGElement \| null`                                          | bindable | Optionally bind the underlying `<svg>` element                |
-| `baseSize`   | `number`                                                         | `50`     | Pixels per viewBox unit for intrinsic SVG size (for exports)  |
-| `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -        | All other SVG attributes are forwarded to the `<svg>` element |
-
-## Grid Mode
-
-Grid mode renders text character-by-character in a precise grid, useful for ASCII art that needs exact alignment:
-
-```svelte
-<AsciiArt {text} grid frame margin={[1, 2]} gridClass="ascii-grid" frameClass="ascii-frame" />
-
-<style>
-	.ascii-grid {
-		stroke: #90ee90;
-		stroke-width: 0.03;
-		opacity: 0.5;
-	}
-	.ascii-frame {
-		stroke: #ffb366;
-		stroke-width: 0.05;
-	}
-</style>
-```
-
-## Colors
-
-`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets. Style state persists across lines, unknown codes and non-SGR escapes are stripped. Blink emits an `ansi-blink` class with no default styling — style it from the host if you want it.
-
-Backgrounds paint as full-cell `<rect>`s behind the text, so adjacent runs and rows tile into solid blocks like a terminal. Inverse video swaps foreground and background; with no explicit foreground the glyphs paint in `--ansi-default-bg` (defaults to the `Canvas` system color) — set it to your page background.
-
-The 16 base colors render as CSS classes (`ansi-fg-31`, `ansi-bg-41`, `ansi-bold`, `ansi-dim`, …) backed by custom properties, so the host page can theme them:
-
-```css
-.my-terminal {
-	--ansi-fg-31: #ff5f56; /* red */
-	--ansi-fg-36: #4cd4e0; /* cyan */
-	--ansi-bg-41: #8b1a10; /* red background */
-	--ansi-default-bg: #1e1e1e;
-}
-```
-
-256-color and truecolor values are applied as inline `fill` styles.
-
-Character widths are display-based: CJK and emoji occupy two cells and stay aligned with box-drawing art.
-
-The svg has `role="img"`; pass `aria-label` to describe the art to screen readers.
-
-## Exporting
-
-The package provides utilities to export styled SVGs and PNGs:
+PNG in the browser:
 
 ```ts
-import { exportSvg, exportSvgToPng } from 'svelte-asciiart';
+import { exportSvg } from 'lovely-ansi-svg';
+import { collectFontCss, svgStringToPng } from 'lovely-svg-png';
 
-// Export SVG with computed styles embedded as a <style> block
-const svgMarkup = exportSvg(svgElement, {
-	includeBackground: true,
-	backgroundColor: '#f3f4f6'
-});
-
-// Export to PNG (returns data URL by default)
-const pngDataUrl = await exportSvgToPng(svgElement, {
-	includeBackground: true,
-	backgroundColor: '#f3f4f6',
-	scale: 2 // retina scale factor
-});
-
-// Export to PNG as Blob
-const pngBlob = await exportSvgToPng(svgElement, { output: 'blob' });
+const svg = exportSvg(text, { fontFamily: '"JetBrains Mono", monospace' });
+const fontCss = await collectFontCss('"JetBrains Mono"');
+const blob = await svgStringToPng(svg, { fontCss, scale: 2, output: 'blob' });
 ```
 
-The `exportSvg` function extracts computed styles from classed elements (e.g., `gridClass`, `frameClass`) and embeds them in the SVG, making it standalone and portable.
+See each package's README for the full API.
 
 ## License
 

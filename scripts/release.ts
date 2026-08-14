@@ -1,26 +1,26 @@
 /**
- * Cuts a release: rolls the changelog over, bumps the package version,
+ * Cuts a release: rolls the changelogs over, bumps the package versions,
  * verifies, commits, tags and pushes.
  *
  *   bun run release [patch|minor|major|x.y.z] [--no-push]
  *
- * The version lives in `packages/svelte-asciiart/package.json`; the changelog
- * at the repo root. The tag push triggers `.github/workflows/publish.yml`,
- * which stages the build on npm and creates the GitHub Release. The script
- * then waits for the staged version to appear, asks for a 2FA code and
- * approves it — that approval is what actually publishes. `--no-push` stops
- * at the tag so the commit can be inspected first; nothing reaches npm until
- * it is pushed.
+ * All publishable packages live under `packages/<name>/`, each with its own
+ * `CHANGELOG.md`, and are versioned in lockstep under a single `v<ver>` tag.
+ * A package whose changelog has no [Unreleased] entries keeps its section for
+ * next time but is still published at the new version. The tag push triggers
+ * `.github/workflows/publish.yml`, which stages the builds on npm and creates
+ * the GitHub Release. The script then waits for each staged version to appear,
+ * asks for a 2FA code and approves it — that approval is what actually
+ * publishes. `--no-push` stops at the tag so the commit can be inspected
+ * first; nothing reaches npm until it is pushed.
  *
  * Writing changelog entries is `/cl`'s job, not this script's — everything
  * here is mechanical, which is what makes the unattended push at the end
  * acceptable.
  */
 
-import { $ } from 'bun';
-
-const PKG = 'packages/svelte-asciiart';
-const NAME = 'svelte-asciiart';
+import { $, Glob } from 'bun';
+import { dirname } from 'node:path';
 
 const die = (msg: string): never => {
 	console.error(msg);
@@ -46,10 +46,22 @@ if ((await $`git status --porcelain`.text()).trim()) die('worktree is dirty; com
 if (push && (await $`npm whoami`.nothrow().quiet()).exitCode !== 0)
 	die('not logged in to npm (needed to approve the staged release); run npm login first');
 
-const pkgPath = `${PKG}/package.json`;
-const pkgText = await Bun.file(pkgPath).text();
-const current = (JSON.parse(pkgText).version ?? '') as string;
-const cur = parse(current) ?? die(`${pkgPath} version ${current} is not semver`);
+// Publishable packages: every packages/*/package.json that is not private.
+const pkgs: { dir: string; name: string; pkgPath: string; pkgText: string }[] = [];
+for (const pkgPath of [...new Glob('packages/*/package.json').scanSync()].sort()) {
+	const pkgText = await Bun.file(pkgPath).text();
+	const json = JSON.parse(pkgText);
+	if (json.private) continue;
+	pkgs.push({ dir: dirname(pkgPath), name: json.name, pkgPath, pkgText });
+}
+if (!pkgs.length) die('no publishable packages under packages/');
+
+// Lockstep: every package must be at the same version.
+const versions = pkgs.map((p) => (JSON.parse(p.pkgText).version ?? '') as string);
+const current = versions[0];
+if (versions.some((v) => v !== current))
+	die(`package versions out of lockstep: ${pkgs.map((p, i) => `${p.name}@${versions[i]}`).join(', ')}`);
+const cur = parse(current) ?? die(`version ${current} is not semver`);
 
 let version: string;
 if (target === 'patch') version = `${cur[0]}.${cur[1]}.${cur[2] + 1}`;
@@ -63,40 +75,59 @@ else {
 
 if ((await $`git tag -l ${`v${version}`}`.text()).trim()) die(`tag v${version} already exists`);
 
-const onNpm = await $`npm view ${`${NAME}@${version}`} version`.nothrow().quiet();
-if (onNpm.exitCode === 0 && onNpm.stdout.toString().trim()) die(`${version} is already published to npm`);
+for (const { name } of pkgs) {
+	const onNpm = await $`npm view ${`${name}@${version}`} version`.nothrow().quiet();
+	if (onNpm.exitCode === 0 && onNpm.stdout.toString().trim()) die(`${name}@${version} is already published to npm`);
+}
 
-// The [Unreleased] body runs to the next `## [` heading; refuse a release that
-// would carry no entries rather than tagging an empty section.
-const changelog = await Bun.file('CHANGELOG.md').text();
-const heading = '## [Unreleased]';
-const start = changelog.indexOf(heading);
-if (start < 0) die('CHANGELOG.md has no [Unreleased] section');
-const rest = changelog.slice(start + heading.length);
-const nextHeading = rest.search(/^## \[/m);
-if (!/^- /m.test(nextHeading < 0 ? rest : rest.slice(0, nextHeading))) die('[Unreleased] has no entries — run /cl first');
+// A package's [Unreleased] body runs to the next `## [` heading; it is rolled
+// only if it has entries. Refuse a release where no package has any.
+const rollable: { path: string; text: string }[] = [];
+for (const { dir, name } of pkgs) {
+	const path = `${dir}/CHANGELOG.md`;
+	const text = await Bun.file(path).text();
+	const heading = '## [Unreleased]';
+	const start = text.indexOf(heading);
+	if (start < 0) die(`${path} has no [Unreleased] section`);
+	const rest = text.slice(start + heading.length);
+	const nextHeading = rest.search(/^## \[/m);
+	if (/^- /m.test(nextHeading < 0 ? rest : rest.slice(0, nextHeading))) rollable.push({ path, text });
+	else console.log(`${name}: no [Unreleased] entries, changelog left as is`);
+}
+if (!rollable.length) die('no package has [Unreleased] entries — run /cl first');
 
 // Verify before touching any files — a failure here must leave the worktree
 // clean, or re-runs hit the dirty-worktree guard with a half-applied bump.
-console.log(`\n=== verifying ${version} ===\n`);
-await $`bun run check`.cwd(PKG);
-await $`bun run test`.cwd(PKG);
-await $`bun run prepack`.cwd(PKG);
-await $`bun pm pack --dry-run`.cwd(PKG);
+for (const { dir } of pkgs) {
+	console.log(`\n=== verifying ${dir} @ ${version} ===\n`);
+	await $`bun run check`.cwd(dir);
+	await $`bun run test`.cwd(dir);
+	await $`bun run prepack`.cwd(dir);
+	await $`bun pm pack --dry-run`.cwd(dir);
+}
 
 const date = new Date().toISOString().slice(0, 10);
-const rolled = changelog.replace(`${heading}\n`, `${heading}\n\n## [${version}] - ${date}\n`);
-if (rolled === changelog) die('could not roll [Unreleased] over in CHANGELOG.md');
-await Bun.write('CHANGELOG.md', rolled);
+for (const { path, text } of rollable) {
+	const rolled = text.replace('## [Unreleased]\n', `## [Unreleased]\n\n## [${version}] - ${date}\n`);
+	if (rolled === text) die(`could not roll [Unreleased] over in ${path}`);
+	await Bun.write(path, rolled);
+}
 
-const bumped = pkgText.replace(`"version": "${current}"`, `"version": "${version}"`);
-if (bumped === pkgText) die(`could not rewrite the version in ${pkgPath}`);
-await Bun.write(pkgPath, bumped);
+for (const { pkgPath, pkgText } of pkgs) {
+	let bumped = pkgText.replace(`"version": "${current}"`, `"version": "${version}"`);
+	if (bumped === pkgText) die(`could not rewrite the version in ${pkgPath}`);
+	// sibling deps use plain semver ranges (npm publishes the tarball verbatim,
+	// so the workspace: protocol must never appear here) — keep them in lockstep
+	for (const { name } of pkgs) bumped = bumped.replace(new RegExp(`("${name}": ")[^"]+(")`, 'g'), `$1^${version}$2`);
+	await Bun.write(pkgPath, bumped);
+}
 
 console.log(`\n=== committing and tagging ${version} ===\n`);
-await $`git add CHANGELOG.md ${pkgPath}`;
+// sync the lockfile with the new versions/ranges — CI installs --frozen-lockfile
+await $`bun install`.quiet();
+await $`git add bun.lock ${rollable.map((r) => r.path)} ${pkgs.map((p) => p.pkgPath)}`;
 await $`git commit -m ${`chore(release): ${version}`}`;
-await $`git tag -a ${`v${version}`} -m ${`${NAME} ${version}`}`;
+await $`git tag -a ${`v${version}`} -m ${`release ${version}`}`;
 
 if (!push) {
 	console.log(`
@@ -116,27 +147,29 @@ await $`git push origin ${`v${version}`}`;
 console.log(`\n=== waiting for CI to stage ${version} on npm ===\n`);
 // CI runs in under a minute; ten is a hung workflow, not a slow one.
 const deadline = Date.now() + 10 * 60 * 1000;
-let stageId: string | undefined;
-while (!stageId) {
-	const list = await $`npm stage list ${NAME} --json`.nothrow().quiet();
-	if (list.exitCode !== 0) die(`npm stage list failed:\n${list.stderr.toString()}`);
-	const items = JSON.parse(list.stdout.toString()) as { id: string; version: string }[];
-	stageId = items.find((item) => item.version === version)?.id;
-	if (!stageId) {
-		if (Date.now() > deadline) die(`timed out; check the workflow run, then npm stage list + npm stage approve <id>`);
-		await Bun.sleep(10_000);
-		process.stdout.write('.');
+for (const { name } of pkgs) {
+	let stageId: string | undefined;
+	while (!stageId) {
+		const list = await $`npm stage list ${name} --json`.nothrow().quiet();
+		if (list.exitCode !== 0) die(`npm stage list failed:\n${list.stderr.toString()}`);
+		const items = JSON.parse(list.stdout.toString()) as { id: string; version: string }[];
+		stageId = items.find((item) => item.version === version)?.id;
+		if (!stageId) {
+			if (Date.now() > deadline) die(`timed out waiting for ${name}; check the workflow run, then npm stage list + npm stage approve <id>`);
+			await Bun.sleep(10_000);
+			process.stdout.write('.');
+		}
 	}
-}
-console.log(`staged as ${stageId}`);
+	console.log(`${name} staged as ${stageId}`);
 
-for (let attempt = 1; ; attempt++) {
-	const otp = prompt('2FA code to approve and publish:')?.trim();
-	if (!otp) die(`no code entered; approve manually with: npm stage approve ${stageId}`);
-	if ((await $`npm stage approve ${stageId} --otp ${otp}`.nothrow()).exitCode === 0) break;
-	if (attempt === 3) die(`approve manually with: npm stage approve ${stageId}`);
+	for (let attempt = 1; ; attempt++) {
+		const otp = prompt(`2FA code to approve and publish ${name}:`)?.trim();
+		if (!otp) die(`no code entered; approve manually with: npm stage approve ${stageId}`);
+		if ((await $`npm stage approve ${stageId} --otp ${otp}`.nothrow()).exitCode === 0) break;
+		if (attempt === 3) die(`approve manually with: npm stage approve ${stageId}`);
+	}
 }
 
 console.log(`
-Approved and published v${version}.
+Approved and published v${version}: ${pkgs.map((p) => p.name).join(', ')}.
 `);

@@ -21,7 +21,9 @@ const config = {
 		// Resolve the workspace dep to its source (not dist) for vite and
 		// svelte-check alike — dist is gitignored and may not exist.
 		alias: {
-			'svelte-asciiart': '../packages/svelte-asciiart/src/lib/index.ts'
+			'svelte-asciiart': '../packages/svelte-asciiart/src/lib/index.ts',
+			'lovely-ansi-svg': '../packages/lovely-ansi-svg/src/index.ts',
+			'lovely-svg-png': '../packages/lovely-svg-png/src/index.ts'
 		},
 		paths: {
 			base: process.env.BASE_PATH ?? ''

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- The rendering core moved to the new framework-agnostic `lovely-ansi-svg` package; `svelte-asciiart` now exports only the `AsciiArt` component.
+- Removed the `exportSvg`, `exportSvgToPng`, `svgStringToPng`, `collectFontCss` and `fmt` exports — export standalone SVG with `exportSvg(text, options)` from `lovely-ansi-svg` (model-based, no mounted element needed) and rasterize with `svgStringToPng`/`collectFontCss` from `lovely-svg-png`.
+- Removed `bind:svg` — the export path no longer needs the element.
+- Renamed `fontSize` to `glyphScale`.
+- Removed `baseSize`; `cellSize` now sets the intrinsic size (pixels per cell, default 50). The svg always stretches to its container — pass `style="width: auto; height: auto"` for a fixed on-screen scale.
+- Merged `gridClass`/`frameClass` into `grid`/`frame` (`boolean | string`, the string being the CSS class); `grid`/`frame` without a class now draw with a default currentColor stroke instead of invisibly.
+- `cellAspect` defaults to `'auto'`: the aspect and baseline are canvas-measured from the rendered font (after `document.fonts.ready`, re-measured on webfont loads). Pass a number to pin the previous fixed 0.6 geometry.
+- The svg no longer takes its accessible name from the art text: pass `aria-label` yourself for `role="img"`; without a label the svg renders as `role="presentation"`.
+
+### Added
+
+- `measureCellMetrics(fontFamily)` export: the canvas measurement the component uses for `cellAspect: 'auto'`; its `{cellAspect, baseline}` result spreads straight into `exportSvg` options so exports match the live auto-aspect render.
+
+### Changed
+
+- The `ansi-*` theme CSS is emitted as an inline `<style>` block inside the svg (previously component-scoped CSS); theming via `--ansi-*` custom properties works as before.
+- Dim renders as a solid `color-mix()` toward `--ansi-default-bg` instead of `opacity: 0.6` — overlapping full-cell glyphs no longer double-composite into stripes.
+
 ## [0.0.6] - 2026-08-13
 
 ### Added

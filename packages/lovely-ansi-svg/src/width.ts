@@ -30,8 +30,6 @@ const WIDE: [number, number][] = [
 
 const EMOJI = /\p{Emoji_Presentation}/u;
 const ZERO_WIDTH = /^[\p{Mn}\p{Me}\u200b-\u200d\ufeff]+$/u;
-/** Leading combining marks / zero-width joiners of a string. */
-export const LEADING_ZERO_WIDTH = /^[\p{Mn}\p{Me}\u200b-\u200d\ufeff]+/u;
 const VS16 = 0xfe0f;
 
 /**

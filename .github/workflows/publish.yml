@@ -37,51 +37,60 @@ jobs:
       - run: npm install --global npm@12.0.2
       - run: bun install --frozen-lockfile
 
-      - name: Verify release tag matches package version
-        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/svelte-asciiart/package.json').version")"
+      # Packages are versioned in lockstep; the tag must match every one.
+      - name: Verify release tag matches package versions
+        run: |
+          set -euo pipefail
+          for pkg in packages/*/package.json; do
+            test "$GITHUB_REF_NAME" = "v$(node -p "require('./${pkg}').version")" \
+              || { echo "::error::${pkg} does not match $GITHUB_REF_NAME"; exit 1; }
+          done
 
       # Browser tests run in headless chromium via @vitest/browser-playwright.
       - run: bunx playwright install --with-deps chromium
-        working-directory: packages/svelte-asciiart
 
       # Run the verification steps explicitly so a failure names itself and so
       # the publish below can skip lifecycle scripts entirely. `prepack` builds
       # dist/, copies the root README into the package and runs publint.
-      - run: bun run check
-        working-directory: packages/svelte-asciiart
-      - run: bun run test
-        working-directory: packages/svelte-asciiart
-      - run: bun run prepack
-        working-directory: packages/svelte-asciiart
+      - name: Verify packages
+        run: |
+          set -euo pipefail
+          for dir in packages/*/; do
+            echo "=== verifying ${dir} ==="
+            (cd "$dir" && bun run check && bun run test && bun run prepack)
+          done
 
-      # Staged publish: the version lands in npm's staging queue and only goes
+      # Staged publish: the versions land in npm's staging queue and only go
       # live once a maintainer runs `npm stage approve` (2FA). Skipping an
       # already-published or already-staged version is what lets a half-failed
       # release be re-run. A registry error still fails: only a 404 means "not
       # there".
       - name: Stage publish to npm
-        working-directory: packages/svelte-asciiart
         run: |
           set -euo pipefail
 
-          version="$(node -p "require('./package.json').version")"
-          if seen="$(npm view "svelte-asciiart@${version}" version 2>&1)" && [ -n "$seen" ]; then
-            echo "svelte-asciiart@${version} is already published (${seen}); skipping."
-            exit 0
-          fi
-          case "$seen" in
-            *E404*|*"404 Not Found"*) ;;
-            *) echo "::error::could not query npm for ${version}: ${seen}"; exit 1 ;;
-          esac
+          for dir in packages/*/; do
+            name="$(node -p "require('./${dir}package.json').name")"
+            version="$(node -p "require('./${dir}package.json').version")"
 
-          if npm stage list 2>/dev/null | grep -q "svelte-asciiart@${version}\b"; then
-            echo "svelte-asciiart@${version} is already staged; skipping."
-            exit 0
-          fi
+            if seen="$(npm view "${name}@${version}" version 2>&1)" && [ -n "$seen" ]; then
+              echo "${name}@${version} is already published (${seen}); skipping."
+              continue
+            fi
+            case "$seen" in
+              *E404*|*"404 Not Found"*) ;;
+              *) echo "::error::could not query npm for ${name}@${version}: ${seen}"; exit 1 ;;
+            esac
 
-          npm stage publish --access public --provenance --ignore-scripts
+            if npm stage list 2>/dev/null | grep -q "${name}@${version}\b"; then
+              echo "${name}@${version} is already staged; skipping."
+              continue
+            fi
 
-          echo "Staged ${version}. Approve it with: npm stage approve"
+            (cd "$dir" && npm stage publish --access public --provenance --ignore-scripts)
+
+            echo "Staged ${name}@${version}. Approve it with: npm stage approve"
+          done
 
   github-release:
     needs: publish-npm
@@ -102,13 +111,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          awk -v want="## [${GITHUB_REF_NAME#v}]" '
-            index($0, want) == 1 { found = 1; next }
-            found && /^## \[/ { exit }
-            found { print }
-          ' CHANGELOG.md > NOTES.md
+          # Concatenate this version's section from each package changelog
+          # that has one (a package without entries keeps no section).
+          : > NOTES.md
+          for cl in packages/*/CHANGELOG.md; do
+            awk -v want="## [${GITHUB_REF_NAME#v}]" '
+              index($0, want) == 1 { found = 1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' "$cl" > SECTION.md
+            if [ -s SECTION.md ]; then
+              { echo "## $(basename "$(dirname "$cl")")"; cat SECTION.md; } >> NOTES.md
+            fi
+          done
 
-          test -s NOTES.md || { echo "::error::no CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
+          test -s NOTES.md || { echo "::error::no changelog section for $GITHUB_REF_NAME"; exit 1; }
 
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \

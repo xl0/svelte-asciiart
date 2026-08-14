@@ -12,8 +12,8 @@
 		"build": "bun --cwd=demo run build",
 		"build:demo": "bun --cwd=demo run build:demo",
 		"preview": "bun --cwd=demo run preview",
-		"check": "bun --cwd=packages/svelte-asciiart run check && bun --cwd=demo run check",
-		"test": "bun --cwd=packages/svelte-asciiart run test",
+		"check": "bun --cwd=packages/lovely-ansi-svg run build && bun --cwd=packages/lovely-ansi-svg run check && bun --cwd=packages/lovely-svg-png run check && bun --cwd=packages/svelte-asciiart run check && bun --cwd=demo run check",
+		"test": "bun --cwd=packages/lovely-ansi-svg run build && bun --cwd=packages/lovely-ansi-svg run test && bun --cwd=packages/lovely-svg-png run test && bun --cwd=packages/svelte-asciiart run test",
 		"release": "bun scripts/release.ts",
 		"format": "prettier --write .",
 		"lint": "prettier --check ."

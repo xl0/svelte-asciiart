@@ -1,21 +1,38 @@
-import { displayWidth, LEADING_ZERO_WIDTH } from './width.js';
+import { DIM_PCT } from './theme.js';
+import { displayWidth } from './width.js';
 
 /**
- * A run of characters sharing one style. Internal model between the SGR
- * parser and the renderer.
+ * Style of a run of text.
  *
- * - `class`/`fill`: foreground — CSS class(es) for the run's `<tspan>`
- *   (`ansi-bold`, `ansi-fg-31`, …, themeable via `--ansi-fg-*` vars) and/or a
- *   concrete color (256-color / truecolor) applied as inline style.
- * - `bgClass`/`bgFill`: background — same split, painted as a full-cell
- *   `<rect>` behind the text (`ansi-bg-41`, …, themeable via `--ansi-bg-*`).
+ * - `class`/`fill`: foreground — CSS class(es) (`ansi-bold`, `ansi-fg-31`, …,
+ *   themeable via `--ansi-fg-*` vars) and/or a concrete color (256-color /
+ *   truecolor) applied as inline style.
+ * - `bgClass`/`bgFill`: background — same split, painted as a full-cell rect
+ *   behind the text (`ansi-bg-41`, …, themeable via `--ansi-bg-*`).
  */
-export interface Span {
-	text: string;
+export interface Style {
 	class?: string;
 	fill?: string;
 	bgClass?: string;
 	bgFill?: string;
+}
+
+/** A style change: `style` applies from code-unit `offset` to the next break (or end of row). */
+export interface StyleBreak {
+	offset: number;
+	style: Style;
+}
+
+/**
+ * One row of parsed output: the escape-stripped text plus its style
+ * breakpoints (sorted by offset; empty for unstyled text). Styles are overlaid
+ * onto the text — grapheme segmentation happens later, in layout, over the
+ * whole row, so an escape can never tear a cluster (ZWJ emoji, combining
+ * marks) apart.
+ */
+export interface ParsedRow {
+	text: string;
+	breaks: StyleBreak[];
 }
 
 interface SgrState {
@@ -126,7 +143,7 @@ function applySgr(state: SgrState, params: number[]): void {
 	}
 }
 
-function styleOf(state: SgrState): Omit<Span, 'text'> {
+function styleOf(state: SgrState): Style {
 	const classes: string[] = [];
 	for (const a of ATTR_ORDER) if (state.attrs.has(a)) classes.push(`ansi-${a}`);
 
@@ -147,6 +164,9 @@ function styleOf(state: SgrState): Omit<Span, 'text'> {
 		if (bgCode === undefined && bgFill === undefined) bgClass = 'ansi-bg-inverse';
 	}
 	if (fgCode !== undefined) classes.push(`ansi-fg-${fgCode}`);
+	// concrete fills are applied inline (beating class rules), so dim — a
+	// solid mix toward the background in the theme CSS — is baked in here
+	if (fgFill !== undefined && state.attrs.has('dim')) fgFill = `color-mix(in srgb, ${fgFill} ${DIM_PCT}, var(--ansi-default-bg, var(--_ansi-default-bg, Canvas)))`;
 	return {
 		class: classes.length ? classes.join(' ') : undefined,
 		fill: fgFill,
@@ -154,6 +174,8 @@ function styleOf(state: SgrState): Omit<Span, 'text'> {
 		bgFill
 	};
 }
+
+const sameStyle = (a: Style, b: Style) => a.class === b.class && a.fill === b.fill && a.bgClass === b.bgClass && a.bgFill === b.bgFill;
 
 // SGR (group 1 captures params; ':' admits ITU T.416 colon subparams, which
 // applySgr then skips as unknown), other CSI sequences (params + intermediates
@@ -169,22 +191,25 @@ const ESCAPE_RE =
 const C0_RE = /[\x00-\x09\x0b-\x1f\x7f]/;
 
 /**
- * Parse text containing ANSI SGR escapes into styled spans, one array per line.
- * Style state persists across lines until reset. Supported: 16-color, 256-color
- * and truecolor foregrounds and backgrounds; bold, dim, italic, underline,
- * blink, strikethrough; inverse (rendered as a fg/bg swap); resets. Unknown
- * codes are consumed without effect; non-SGR escapes are stripped. Tabs are
- * expanded to 8-column stops; other C0 controls are dropped.
+ * Parse text containing ANSI SGR escapes into rows of escape-stripped text
+ * with style breakpoints. Style state persists across lines until reset.
+ * Supported: 16-color, 256-color and truecolor foregrounds and backgrounds;
+ * bold, dim, italic, underline, blink, strikethrough; inverse (rendered as a
+ * fg/bg swap); resets. Unknown codes are consumed without effect; non-SGR
+ * escapes are stripped. Tabs are expanded to 8-column stops; other C0
+ * controls are dropped. On plain text this degenerates to one break-free row
+ * per line.
  *
  * Escapes are matched over the whole text, not per line: control-string
  * payloads (OSC/DCS/APC/PM/SOS) may legally contain newlines, which must not
  * become row breaks. Rows split only on `\r?\n` in plain chunks.
  */
-export function ansiToSpans(text: string): Span[][] {
+export function parseAnsi(text: string): ParsedRow[] {
 	const state: SgrState = { attrs: new Set() };
-	const rows: Span[][] = [[]];
+	let curStyle: Style = {};
+	const rows: ParsedRow[] = [{ text: '', breaks: [] }];
 	let row = rows[0];
-	// display column, tracked lazily: computed from the row's spans at the
+	// display column, tracked lazily: computed from the row's text at the
 	// first tab, then kept incrementally — tab-free rows never pay the
 	// displayWidth (segmentation) pass
 	let col: number | null = null;
@@ -193,7 +218,7 @@ export function ansiToSpans(text: string): Span[][] {
 			let out = '';
 			for (const part of chunk.split(/([\x00-\x09\x0b-\x1f\x7f])/)) {
 				if (part === '\t') {
-					col ??= row.reduce((w, s) => w + displayWidth(s.text), 0) + displayWidth(out);
+					col ??= displayWidth(row.text) + displayWidth(out);
 					const n = 8 - (col % 8);
 					out += ' '.repeat(n);
 					col += n;
@@ -205,20 +230,24 @@ export function ansiToSpans(text: string): Span[][] {
 			}
 			chunk = out;
 		} else if (col !== null) col += displayWidth(chunk);
-		// combining marks / joiners split off their base glyph by an escape
-		// belong to the previous span, so the grapheme stays one cluster
-		const zw = chunk.match(LEADING_ZERO_WIDTH);
-		if (zw && row.length) {
-			row[row.length - 1].text += zw[0];
-			chunk = chunk.slice(zw[0].length);
+		if (!chunk) return;
+		// record a break only when the style actually changes; a break that got
+		// no text is rewritten in place (or dropped if that undoes the change)
+		const last = row.breaks[row.breaks.length - 1];
+		if (!sameStyle(last?.style ?? {}, curStyle)) {
+			if (last && last.offset === row.text.length) {
+				const prev = row.breaks[row.breaks.length - 2];
+				if (sameStyle(prev?.style ?? {}, curStyle)) row.breaks.pop();
+				else last.style = curStyle;
+			} else row.breaks.push({ offset: row.text.length, style: curStyle });
 		}
-		if (chunk) row.push({ text: chunk, ...styleOf(state) });
+		row.text += chunk;
 	};
 	const plain = (seg: string) => {
 		const parts = seg.split(/\r?\n/);
 		emit(parts[0]);
 		for (let i = 1; i < parts.length; i++) {
-			row = [];
+			row = { text: '', breaks: [] };
 			rows.push(row);
 			col = null;
 			emit(parts[i]);
@@ -228,7 +257,10 @@ export function ansiToSpans(text: string): Span[][] {
 	for (const m of text.matchAll(ESCAPE_RE)) {
 		plain(text.slice(pos, m.index));
 		pos = m.index + m[0].length;
-		if (m[1] !== undefined) applySgr(state, m[1].split(';').map(Number));
+		if (m[1] !== undefined) {
+			applySgr(state, m[1].split(';').map(Number));
+			curStyle = styleOf(state);
+		}
 	}
 	plain(text.slice(pos));
 	return rows;

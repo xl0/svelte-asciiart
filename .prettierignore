@@ -6,7 +6,7 @@ bun.lock
 bun.lockb
 
 # Build output
-/packages/svelte-asciiart/dist/
+/packages/*/dist/
 
 # Miscellaneous
 /demo/static/

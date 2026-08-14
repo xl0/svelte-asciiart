@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { AsciiArt, exportSvg, exportSvgToPng, fmt } from 'svelte-asciiart';
+	import { AsciiArt, measureCellMetrics } from 'svelte-asciiart';
+	import { exportSvg, fmt } from 'lovely-ansi-svg';
+	import { collectFontCss, svgStringToPng } from 'lovely-svg-png';
 	import { untrack } from 'svelte';
 	import type { PageData } from './$types';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -104,6 +106,7 @@
 	let autoCols = $state(false);
 	let rows = $state<number>(4);
 	let cols = $state<number>(22);
+	let autoAspect = $state(true);
 	let cellAspect = $state(0.6);
 	let marginTop = $state(1);
 	let marginRight = $state(2);
@@ -118,13 +121,9 @@
 	let frameStrokeWidth = $state(0.05);
 	let frameLineStyle = $state('solid');
 	let gridLineStyle = $state('solid');
-	let bindSvg = $state(false);
-	let svg = $state<SVGSVGElement | null>(null);
-	let copiedSvgRaw = $state(false);
-	let copiedSvgStyles = $state(false);
+	let copiedSvg = $state(false);
 	let copiedPng = $state(false);
-	let copiedSvgRawTimeout: ReturnType<typeof setTimeout> | undefined;
-	let copiedSvgStylesTimeout: ReturnType<typeof setTimeout> | undefined;
+	let copiedSvgTimeout: ReturnType<typeof setTimeout> | undefined;
 	let copiedPngTimeout: ReturnType<typeof setTimeout> | undefined;
 	let bgColor = $state('#f3f4f6');
 	let fillColor = $state('#111827');
@@ -132,7 +131,7 @@
 	let strokeWidth = $state(0);
 	let bold = $state(false);
 	let showExport = $state(false);
-	let baseSize = $state(50);
+	let cellSize = $state(50);
 	const fontFamily = $derived(monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family);
 
 	const frameMargin = $derived([marginTop, marginRight, marginBottom, marginLeft] as [number, number, number, number]);
@@ -147,9 +146,70 @@
 	const gridDashArray = $derived(getDashArray(gridLineStyle, gridStrokeWidth));
 	const frameDashArray = $derived(getDashArray(frameLineStyle, frameStrokeWidth));
 
-	// Export views render only while Bind SVG is on — the switch that controls
-	// showExport lives inside the bindSvg block, so gate on both.
-	const exportOn = $derived(bindSvg && showExport);
+	const exportOn = $derived(showExport);
+
+	// Measure the selected font like the component does, so the export matches
+	// the live render when the aspect is on auto
+	let measured = $state<{ cellAspect: number; baseline: number } | null>(null);
+	$effect(() => {
+		const family = fontFamily;
+		let stale = false;
+		const run = () => {
+			if (stale) return;
+			// only assign on change: a fresh object would re-trigger the export
+			// views on every unrelated font load
+			const m = measureCellMetrics(family);
+			if (m?.cellAspect !== measured?.cellAspect || m?.baseline !== measured?.baseline) measured = m;
+		};
+		run();
+		document.fonts.ready.then(run);
+		document.fonts.addEventListener('loadingdone', run);
+		return () => {
+			stale = true;
+			document.fonts.removeEventListener('loadingdone', run);
+		};
+	});
+
+	// The export is model-based (exportSvg(text, options)) — the demo styling
+	// that lives in host CSS for the live render goes in via extraCss instead.
+	function buildExportCss(): string {
+		const rules: string[] = [];
+		if (showGrid) {
+			rules.push(
+				`.ascii-grid { stroke: ${gridStroke}; stroke-width: ${fmt(gridStrokeWidth)}; opacity: ${fmt(gridOpacity)};${
+					gridDashArray !== 'none' ? ` stroke-dasharray: ${gridDashArray};` : ''
+				} fill: none }`
+			);
+		}
+		if (frame) {
+			rules.push(
+				`.ascii-frame { stroke: ${frameStroke}; stroke-width: ${fmt(frameStrokeWidth)};${
+					frameDashArray !== 'none' ? ` stroke-dasharray: ${frameDashArray};` : ''
+				} fill: none }`
+			);
+		}
+		rules.push(
+			`text, tspan { fill: ${fillColor}; stroke: ${strokeColor}; stroke-width: ${fmt(strokeWidth)}; font-weight: ${bold ? 700 : 400}; paint-order: stroke fill }`
+		);
+		return rules.join('\n');
+	}
+
+	function exportOptions() {
+		return {
+			...(rowsProp === undefined ? {} : { rows: rowsProp }),
+			...(colsProp === undefined ? {} : { cols: colsProp }),
+			margin: frameMargin,
+			// exportSvg cannot measure fonts itself (no DOM) — pass the measured
+			// metrics so the export matches the live auto-aspect render
+			...(autoAspect ? (measured ?? {}) : { cellAspect }),
+			grid: showGrid ? ('ascii-grid' as const) : false,
+			frame: frame ? ('ascii-frame' as const) : false,
+			cellSize,
+			fontFamily,
+			background: bgColor,
+			extraCss: buildExportCss()
+		};
+	}
 
 	// Debounced trigger shared by all export views: codePreview reads every
 	// control that affects the render, so its debounced copy (set below, after
@@ -161,26 +221,25 @@
 	let pngPreviewUrl = $state<string | null>(null);
 	let pngGen = 0;
 	$effect(() => {
-		if (!svg || !exportOn) {
+		if (!exportOn) {
 			if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
 			pngPreviewUrl = null;
 			return;
 		}
 		void debouncedPreview;
-		const svgEl = svg;
-		// untrack: bgColor changes already arrive via debouncedPreview; a direct
-		// dependency would regenerate undebounced on every color-drag tick
-		const bg = untrack(() => bgColor);
+		// measurement lands async and isn't in the snippet — depend on it
+		// directly (it only changes on font change/load, no debounce needed)
+		void measured;
+		// untrack: every other input already arrives via debouncedPreview; direct
+		// dependencies would regenerate undebounced on every slider tick
+		const [svgStr, family] = untrack(() => [exportSvg(text, exportOptions()), fontFamily]);
 		// export duration varies (font fetches) — the generation token keeps a
 		// slow older render from overwriting a newer one
 		const gen = ++pngGen;
 		void (async () => {
 			try {
-				const blob = await exportSvgToPng(svgEl, {
-					includeBackground: true,
-					backgroundColor: bg,
-					output: 'blob'
-				});
+				const fontCss = await collectFontCss(family);
+				const blob = await svgStringToPng(svgStr, { fontCss, output: 'blob' });
 				if (gen !== pngGen) return;
 				if (pngPreviewUrl) URL.revokeObjectURL(pngPreviewUrl);
 				pngPreviewUrl = URL.createObjectURL(blob);
@@ -193,27 +252,22 @@
 		})();
 	});
 
-	// Derived SVG exports for display, on the same debounced trigger
-	const svgRaw = $derived.by(() => {
-		if (!svg || !exportOn) return null;
+	// The exported SVG string for display, on the same debounced trigger
+	const svgExported = $derived.by(() => {
+		if (!exportOn) return null;
 		void debouncedPreview;
-		return svg.outerHTML;
+		void measured;
+		return untrack(() => exportSvg(text, exportOptions()));
 	});
 
-	const svgStyled = $derived.by(() => {
-		if (!svg || !exportOn) return null;
-		void debouncedPreview;
-		return exportSvg(svg, { includeBackground: true, backgroundColor: untrack(() => bgColor) });
-	});
-
-	function buildMarginProp(): string {
+	function marginLiteral(): string | null {
 		const hasMargin = marginTop > 0 || marginRight > 0 || marginBottom > 0 || marginLeft > 0;
-		if (!hasMargin) return '';
+		if (!hasMargin) return null;
 		if (marginTop === marginBottom && marginLeft === marginRight) {
-			if (marginTop === marginLeft) return `\n  margin={${fmt(marginTop)}}`;
-			return `\n  margin={[${fmt(marginTop)}, ${fmt(marginLeft)}]}`;
+			if (marginTop === marginLeft) return fmt(marginTop);
+			return `[${fmt(marginTop)}, ${fmt(marginLeft)}]`;
 		}
-		return `\n  margin={[${fmt(marginTop)}, ${fmt(marginRight)}, ${fmt(marginBottom)}, ${fmt(marginLeft)}]}`;
+		return `[${fmt(marginTop)}, ${fmt(marginRight)}, ${fmt(marginBottom)}, ${fmt(marginLeft)}]`;
 	}
 
 	function buildClassProp(): string {
@@ -279,10 +333,29 @@
 		].join('\n');
 	}
 
+	// options literal for the example snippet, mirroring exportOptions()
+	function buildOptsLiteral(): string[] {
+		const parts: string[] = [];
+		if (rowsProp !== undefined) parts.push(`rows: ${fmt(rowsProp)}`);
+		if (colsProp !== undefined) parts.push(`cols: ${fmt(colsProp)}`);
+		const margin = marginLiteral();
+		if (margin) parts.push(`margin: ${margin}`);
+		if (!autoAspect) parts.push(`cellAspect: ${fmt(cellAspect)}`);
+		else parts.push('...measureCellMetrics(fontFamily)');
+		if (showGrid) parts.push(`grid: 'ascii-grid'`);
+		if (frame) parts.push(`frame: 'ascii-frame'`);
+		if (cellSize !== 50) parts.push(`cellSize: ${cellSize}`);
+		parts.push('fontFamily');
+		parts.push(`background: '${bgColor}'`);
+		parts.push('extraCss');
+		return parts;
+	}
+
 	let codePreview = $derived.by(() => {
 		// escape everything a template literal interprets: \, ` and ${
-		const escapedText = text.replace(/[\\`]|\$\{/g, (m) => '\\' + m);
-		const marginProp = buildMarginProp();
+		const esc = (s: string) => s.replace(/[\\`]|\$\{/g, (m) => '\\' + m);
+		const escapedText = esc(text);
+		const margin = marginLiteral();
 		const classProp = buildClassProp();
 		const fontCss = buildFontCss();
 		const fontHead = buildFontHead();
@@ -292,52 +365,46 @@
 			lines.push('');
 		}
 		lines.push('<script lang="ts">');
+		lines.push(
+			exportOn && autoAspect
+				? "  import { AsciiArt, measureCellMetrics } from 'svelte-asciiart';"
+				: "  import { AsciiArt } from 'svelte-asciiart';"
+		);
 		if (exportOn) {
-			lines.push("  import { AsciiArt, exportSvg, exportSvgToPng } from 'svelte-asciiart';");
-		} else {
-			lines.push("  import { AsciiArt } from 'svelte-asciiart';");
-		}
-		if (bindSvg) {
-			lines.push('  let svg = $state<SVGSVGElement>();');
+			lines.push("  import { exportSvg } from 'lovely-ansi-svg';");
+			lines.push("  import { collectFontCss, svgStringToPng } from 'lovely-svg-png';");
 		}
 		lines.push(`  const text = \`${escapedText}\`;`);
+		if (exportOn) {
+			lines.push('');
+			lines.push('  // model-based export: same options as the component props');
+			lines.push(`  const fontFamily = ${JSON.stringify(fontFamily)};`);
+			lines.push(`  const extraCss = \`${esc(buildExportCss())}\`;`);
+			lines.push(`  const opts = { ${buildOptsLiteral().join(', ')} };`);
+		}
 		lines.push('<\/script>');
 		lines.push('');
 		lines.push('<AsciiArt');
-		if (bindSvg) lines.push('  bind:svg');
 		lines.push('  {text}');
 		if (rowsProp !== undefined) lines.push(`  rows={${fmt(rowsProp)}}`);
 		if (colsProp !== undefined) lines.push(`  cols={${fmt(colsProp)}}`);
-		if (cellAspect !== 0.6) lines.push(`  cellAspect={${fmt(cellAspect)}}`);
-		if (showGrid) lines.push('  grid');
-		if (frame) lines.push('  frame');
-		if (marginProp) lines.push(marginProp.slice(1));
+		if (!autoAspect) lines.push(`  cellAspect={${fmt(cellAspect)}}`);
+		if (showGrid) lines.push('  grid="ascii-grid"');
+		if (frame) lines.push('  frame="ascii-frame"');
+		if (margin) lines.push(`  margin={${margin}}`);
 		if (classProp) lines.push(classProp.slice(1));
-		if (showGrid) lines.push('  gridClass="ascii-grid"');
-		if (frame) lines.push('  frameClass="ascii-frame"');
-		if (exportOn && baseSize !== 50) lines.push(`  baseSize={${baseSize}}`);
+		if (exportOn && cellSize !== 50) lines.push(`  cellSize={${cellSize}}`);
 		lines.push('/>');
-		if (bindSvg && !exportOn) {
-			lines.push('');
-			lines.push('{#if svg}');
-			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
-			lines.push('{/if}');
-		}
 		if (exportOn) {
 			lines.push('');
-			lines.push('{#if svg}');
-			lines.push('  <button type="button" onclick={() => navigator.clipboard.writeText(svg.outerHTML)}>Copy SVG</button>');
-			lines.push('  <button type="button" onclick={async () => {');
-			lines.push('    const markup = exportSvg(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });');
-			lines.push('    await navigator.clipboard.writeText(markup);');
-			lines.push('  }}>Copy SVG + Styles</button>');
-			lines.push('  <button type="button" onclick={async () => {');
-			lines.push('    const dataUrl = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: "#f3f4f6" });');
-			lines.push('    const response = await fetch(dataUrl);');
-			lines.push('    const blob = await response.blob();');
-			lines.push('    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);');
-			lines.push('  }}>Copy PNG</button>');
-			lines.push('{/if}');
+			lines.push('<button type="button" onclick={async () => {');
+			lines.push('  await navigator.clipboard.writeText(exportSvg(text, opts));');
+			lines.push('}}>Copy SVG</button>');
+			lines.push('<button type="button" onclick={async () => {');
+			lines.push('  const fontCss = await collectFontCss(opts.fontFamily);');
+			lines.push('  const blob = await svgStringToPng(exportSvg(text, opts), { fontCss, output: "blob" });');
+			lines.push('  await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);');
+			lines.push('}}>Copy PNG</button>');
 		}
 		lines.push('');
 		if (showGrid || frame || fontCss || bold || hasCustomBg() || hasCustomPaint()) {
@@ -396,40 +463,24 @@
 	let copied = $state(false);
 	let copiedTimeout: ReturnType<typeof setTimeout> | undefined;
 
-	async function copySvgRaw() {
-		if (!svg) return;
+	async function copySvg() {
 		try {
-			await navigator.clipboard.writeText(svg.outerHTML);
+			await navigator.clipboard.writeText(exportSvg(text, exportOptions()));
 		} catch (e) {
 			console.error('Failed to copy SVG:', e);
 			return;
 		}
-		copiedSvgRaw = true;
-		if (copiedSvgRawTimeout) clearTimeout(copiedSvgRawTimeout);
-		copiedSvgRawTimeout = setTimeout(() => {
-			copiedSvgRaw = false;
-		}, 800);
-	}
-
-	async function copySvgWithStyles() {
-		if (!svg) return;
-		try {
-			await navigator.clipboard.writeText(exportSvg(svg, { includeBackground: true, backgroundColor: bgColor }));
-		} catch (e) {
-			console.error('Failed to copy SVG:', e);
-			return;
-		}
-		copiedSvgStyles = true;
-		if (copiedSvgStylesTimeout) clearTimeout(copiedSvgStylesTimeout);
-		copiedSvgStylesTimeout = setTimeout(() => {
-			copiedSvgStyles = false;
+		copiedSvg = true;
+		if (copiedSvgTimeout) clearTimeout(copiedSvgTimeout);
+		copiedSvgTimeout = setTimeout(() => {
+			copiedSvg = false;
 		}, 800);
 	}
 
 	async function copyPng() {
-		if (!svg) return;
 		try {
-			const blob = await exportSvgToPng(svg, { includeBackground: true, backgroundColor: bgColor, output: 'blob' });
+			const fontCss = await collectFontCss(fontFamily);
+			const blob = await svgStringToPng(exportSvg(text, exportOptions()), { fontCss, output: 'blob' });
 			await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 		} catch (e) {
 			console.error('Failed to copy PNG:', e);
@@ -497,35 +548,35 @@
 							<Label for="frame-toggle" class="whitespace-nowrap">Frame</Label>
 						</div>
 						<div class="flex min-w-fit items-center gap-2">
-							<Switch id="bind-svg-toggle" bind:checked={bindSvg} />
-							<Label for="bind-svg-toggle" class="whitespace-nowrap">Bind SVG</Label>
+							<Switch id="export-toggle" bind:checked={showExport} />
+							<Label for="export-toggle" class="whitespace-nowrap">Demo Export</Label>
 						</div>
-						{#if bindSvg}
-							<div class="flex min-w-fit items-center gap-2">
-								<Switch id="export-toggle" bind:checked={showExport} />
-								<Label for="export-toggle" class="whitespace-nowrap">Demo Export</Label>
-							</div>
-						{/if}
 					</div>
 
 					<div class="flex items-end gap-4 w-full">
 						<div class="flex-1 space-y-2">
-							<Label>Cell aspect: {cellAspect.toFixed(2)}</Label>
-							<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} />
+							<div class="flex items-center justify-between gap-2">
+								<Label>Cell aspect: {autoAspect ? 'auto (measured)' : cellAspect.toFixed(2)}</Label>
+								<div class="flex items-center gap-1.5">
+									<Switch id="aspect-auto" bind:checked={autoAspect} />
+									<Label for="aspect-auto" class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Auto</Label>
+								</div>
+							</div>
+							<Slider type="single" bind:value={cellAspect} min={0.35} max={1} step={0.01} disabled={autoAspect} />
 						</div>
 
 						{#if exportOn}
 							<div class="w-fit space-y-2">
-								<Label for="base-size" class="text-xs whitespace-nowrap text-muted-foreground">Base Size</Label>
+								<Label for="cell-size" class="text-xs whitespace-nowrap text-muted-foreground">Cell Size</Label>
 								<Input
-									id="base-size"
+									id="cell-size"
 									type="number"
 									min={10}
 									max={200}
-									value={String(baseSize)}
+									value={String(cellSize)}
 									oninput={(e) => {
 										const v = Number((e.currentTarget as HTMLInputElement).value);
-										if (Number.isFinite(v) && v > 0) baseSize = v;
+										if (Number.isFinite(v) && v > 0) cellSize = v;
 									}}
 									class="h-9 w-20" />
 							</div>
@@ -722,35 +773,25 @@
 		<div class="mx-auto flex h-full w-fit max-w-2xl flex-col space-y-6 xl:mr-auto xl:ml-0">
 			<div class="ascii-surface w-full resize overflow-auto rounded-sm border border-border" style={buildWrapperStyle()}>
 				<AsciiArt
-					bind:svg
 					{text}
 					{...sizeProps}
-					grid={showGrid}
-					{cellAspect}
-					{frame}
+					grid={showGrid ? 'ascii-grid' : false}
+					frame={frame ? 'ascii-frame' : false}
+					cellAspect={autoAspect ? 'auto' : cellAspect}
 					margin={frameMargin}
-					gridClass={showGrid ? 'ascii-grid' : ''}
-					frameClass={frame ? 'ascii-frame' : ''}
-					baseSize={exportOn ? baseSize : undefined} />
+					cellSize={exportOn ? cellSize : undefined} />
 			</div>
 
-			{#if bindSvg}
-				<div class="flex flex-wrap gap-2">
-					<Button variant="outline" onclick={copySvgRaw} disabled={!svg} size="sm">
-						{copiedSvgRaw ? 'Copied!' : 'Copy SVG'}
-					</Button>
-					{#if exportOn}
-						<Button variant="outline" onclick={copySvgWithStyles} disabled={!svg} size="sm">
-							{copiedSvgStyles ? 'Copied!' : 'Copy SVG + Styles'}
-						</Button>
-						<Button variant="outline" onclick={copyPng} size="sm">
-							{copiedPng ? 'Copied!' : 'Copy PNG'}
-						</Button>
-					{/if}
-				</div>
-			{/if}
-
 			{#if exportOn}
+				<div class="flex flex-wrap gap-2">
+					<Button variant="outline" onclick={copySvg} size="sm">
+						{copiedSvg ? 'Copied!' : 'Copy SVG'}
+					</Button>
+					<Button variant="outline" onclick={copyPng} size="sm">
+						{copiedPng ? 'Copied!' : 'Copy PNG'}
+					</Button>
+				</div>
+
 				{#if pngPreviewUrl}
 					<div class="space-y-2">
 						<Label class="text-sm font-medium text-muted-foreground">PNG Export Preview</Label>
@@ -760,26 +801,14 @@
 					</div>
 				{/if}
 
-				{#if svgRaw}
+				{#if svgExported}
 					<Collapsible.Root class="space-y-2">
 						<Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
 							<ChevronDown class="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
-							Raw SVG
+							Exported SVG
 						</Collapsible.Trigger>
 						<Collapsible.Content>
-							<Textarea value={svgRaw} readonly rows={6} class="font-mono text-xs" />
-						</Collapsible.Content>
-					</Collapsible.Root>
-				{/if}
-
-				{#if svgStyled}
-					<Collapsible.Root class="space-y-2">
-						<Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-							<ChevronDown class="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
-							SVG with Embedded Styles
-						</Collapsible.Trigger>
-						<Collapsible.Content>
-							<Textarea value={svgStyled} readonly rows={6} class="font-mono text-xs" />
+							<Textarea value={svgExported} readonly rows={6} class="font-mono text-xs" />
 						</Collapsible.Content>
 					</Collapsible.Root>
 				{/if}

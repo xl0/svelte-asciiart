@@ -1,0 +1,48 @@
+{
+	"name": "lovely-ansi-svg",
+	"version": "0.0.6",
+	"description": "Convert ANSI/ASCII terminal text into a crisp, styleable SVG character grid. Framework-agnostic, no DOM needed.",
+	"license": "MIT",
+	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"check": "tsc --noEmit",
+		"test:unit": "vitest",
+		"test": "vitest --run",
+		"prepack": "bun run build && cp ../../LICENSE LICENSE && publint",
+		"format": "prettier --write .",
+		"lint": "prettier --check ."
+	},
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"devDependencies": {
+		"publint": "^0.3.23",
+		"typescript": "^5.9",
+		"vitest": "^4.1.10"
+	},
+	"keywords": [
+		"ansi",
+		"svg",
+		"terminal",
+		"ascii",
+		"ascii-art",
+		"ansi-to-svg"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/svelte-asciiart.git",
+		"directory": "packages/lovely-ansi-svg"
+	},
+	"bugs": {
+		"url": "https://github.com/xl0/svelte-asciiart/issues"
+	},
+	"homepage": "https://github.com/xl0/svelte-asciiart#readme"
+}

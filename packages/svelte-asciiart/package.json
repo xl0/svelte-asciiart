@@ -1,7 +1,7 @@
 {
 	"name": "svelte-asciiart",
 	"version": "0.0.6",
-	"description": "Render ASCII art as a crisp, styleable SVG character grid in Svelte 5, with SVG/PNG export",
+	"description": "Render ASCII/ANSI art as a crisp, styleable SVG character grid in Svelte 5 (thin wrapper around lovely-ansi-svg)",
 	"license": "MIT",
 	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
 	"scripts": {
@@ -9,7 +9,7 @@
 		"build": "vite build && npm run prepack",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"prepack": "svelte-kit sync && svelte-package && cp ../../README.md README.md && cp ../../LICENSE LICENSE && publint",
+		"prepack": "svelte-kit sync && svelte-package && cp ../../LICENSE LICENSE && publint",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test:unit": "vitest",
@@ -36,6 +36,9 @@
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"lovely-ansi-svg": "^0.0.6"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",

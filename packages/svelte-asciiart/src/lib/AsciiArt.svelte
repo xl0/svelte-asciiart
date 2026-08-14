@@ -1,29 +1,42 @@
+<script lang="ts" module>
+	import {
+		DEFAULT_FONT_STACK,
+		layout,
+		parseAnsi,
+		render,
+		themeCss,
+		type Margin
+	} from 'lovely-ansi-svg';
+
+	// one source of truth for the ansi-* palette: the core theme, emitted as an
+	// inline <style> per instance (colors stay overridable via --ansi-* vars).
+	// The <style> is document-scoped, so the rules are scoped to our own svgs —
+	// bare .ansi-* rules would restyle the whole host page
+	const THEME_CSS = themeCss(undefined, 'svg.asciiart');
+</script>
+
 <script lang="ts">
 	import type { SVGAttributes } from 'svelte/elements';
-	import { ansiToSpans, type Span } from './ansi.js';
-	import { clusters, clusterWidth } from './width.js';
-	import { fmt } from './utils.js';
+	import { measureCellMetrics } from './metrics.js';
 
-	type Margin = number | [number, number] | [number, number, number, number];
-
-	// Props
 	interface Props extends SVGAttributes<SVGSVGElement> {
 		/** Plain text, or text with ANSI SGR escapes. */
 		text?: string;
+		/** Frame height in cells; default: content height. */
 		rows?: number;
+		/** Frame width in cells; default: content width (display columns). */
 		cols?: number;
-		grid?: boolean;
-		cellAspect?: number;
-		gridClass?: string;
-		frame?: boolean;
+		/** Margin around the frame, in cells: uniform, [v, h] or [t, r, b, l]. */
 		margin?: Margin;
-		frameClass?: string;
-		svg?: SVGSVGElement | null;
-		/** Pixels per viewBox unit for intrinsic size. Default: 50 */
-		baseSize?: number;
-		/** Glyph size as a fraction of cell height. Default: 1 (full cell — box-drawing lines tile seamlessly) */
-		fontSize?: number;
-		/** Pixels per cell (height). When set, the svg renders at that fixed scale instead of stretching to its container. */
+		/** Cell grid lines: `true` for a default faint stroke, a string for a CSS class. */
+		grid?: boolean | string;
+		/** Border around the frame: `true` for a default stroke, a string for a CSS class. */
+		frame?: boolean | string;
+		/** Cell width:height ratio; 'auto' (default) measures the rendered font once loaded. */
+		cellAspect?: number | 'auto';
+		/** Glyph size as a fraction of cell height. Default: 1 (full cell — box-drawing lines tile seamlessly). */
+		glyphScale?: number;
+		/** Pixels per cell (height) for the intrinsic size. Default: 50. For a fixed on-screen scale pass style="width: auto; height: auto". */
 		cellSize?: number;
 	}
 
@@ -31,382 +44,128 @@
 		text = '',
 		rows,
 		cols,
-		grid = false,
-		// Width:Height ratio for monospace is typically ~0.6 and getting the exact number dynamically is a hassle.
-		cellAspect = 0.6,
-		gridClass = '',
-		frame = false,
 		margin = 0,
-		frameClass = '',
-		svg = $bindable(),
-		baseSize = 50,
-		fontSize = 1,
-		cellSize,
+		grid = false,
+		frame = false,
+		cellAspect = 'auto',
+		glyphScale = 1,
+		cellSize = 50,
 		...rest
 	}: Props = $props();
 
-	function parseMargin(m: Margin): { top: number; right: number; bottom: number; left: number } {
-		if (typeof m === 'number') return { top: m, right: m, bottom: m, left: m };
-		if (m.length === 2) return { top: m[0], right: m[1], bottom: m[0], left: m[1] };
-		return { top: m[0], right: m[1], bottom: m[2], left: m[3] };
-	}
+	let svgEl: SVGSVGElement | undefined = $state();
+	let probeEl: SVGTextElement | undefined = $state();
 
-	const parsedMargin = $derived(parseMargin(margin));
+	// font metrics, canvas-measured from the mounted svg's font when
+	// cellAspect is 'auto'; null until measured (render() falls back to 0.6/0.8)
+	let measured = $state<{ cellAspect: number; baseline: number } | null>(null);
 
-	// Parse into styled rows; on plain text ansiToSpans degenerates to
-	// one unstyled span per line
-	const spanRows = $derived(ansiToSpans(text));
+	$effect(() => {
+		if (cellAspect !== 'auto' || !svgEl || !probeEl) return;
+		const el = svgEl;
+		const measure = () => {
+			const m = measureCellMetrics(getComputedStyle(el).fontFamily);
+			if (m && (m.cellAspect !== measured?.cellAspect || m.baseline !== measured?.baseline)) measured = m;
+		};
+		// the hidden probe glyph's bounding box tracks the resolved font, so the
+		// observer fires on anything that changes it: --ascii-font-family flips on
+		// ancestors, consumer style/class changes, webfont loads (and once on
+		// observe, for the initial measurement)
+		const ro = new ResizeObserver(measure);
+		ro.observe(probeEl);
+		return () => ro.disconnect();
+	});
 
-	// Accessible-name fallback for role="img": the escape-stripped text
-	const plainText = $derived(spanRows.map((row) => row.map((s) => s.text).join('')).join('\n'));
-
-	const role = $derived((rest.role as string | undefined) ?? (plainText ? 'img' : 'presentation'));
-	// ARIA prohibits naming presentational elements — an aria-label there would
-	// revoke the role and get the element announced anyway
-	const ariaLabel = $derived(
-		role === 'presentation' || role === 'none'
-			? undefined
-			: (rest['aria-label'] ?? (rest['aria-labelledby'] || !plainText ? undefined : plainText))
+	// the segmentation pass depends only on the text; geometry-only prop
+	// changes reuse it
+	const layoutRows = $derived(layout(parseAnsi(text)));
+	const model = $derived(
+		render(layoutRows, {
+			rows,
+			cols,
+			margin,
+			grid,
+			frame,
+			cellAspect: cellAspect === 'auto' ? measured?.cellAspect : cellAspect,
+			baseline: cellAspect === 'auto' ? measured?.baseline : undefined,
+			glyphScale,
+			cellSize
+		})
 	);
 
-	// Derive rows/cols (display columns, not code units) from content if not
-	// provided. Consumer rows/cols are clamped to non-negative integers —
-	// negative or fractional values would corrupt the viewBox and array sizes.
-	const clampDim = (n: number | undefined) =>
-		n === undefined || !Number.isFinite(n) ? undefined : Math.max(0, Math.floor(n));
-	const builtRows = $derived(spanRows.map(buildRuns));
-	const contentRows = $derived(spanRows.length);
-	const contentCols = $derived(builtRows.reduce((m, b) => Math.max(m, b.width), 0));
-	const frameRows = $derived(clampDim(rows) ?? contentRows);
-	const frameCols = $derived(clampDim(cols) ?? contentCols);
-	const renderRows = $derived(Math.max(frameRows, contentRows));
-
-	// Character dimensions for monospace font (approximate ratio)
-	const cellHeight = 1;
-	const defaultFontStack =
-		'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-
-	// Calculate viewBox dimensions (frame + margin). Content may overflow the frame into the margin.
-	const totalCols = $derived(frameCols + parsedMargin.left + parsedMargin.right);
-	const totalRows = $derived(frameRows + parsedMargin.top + parsedMargin.bottom);
-	const viewBoxWidth = $derived(totalCols * cellAspect);
-	const viewBoxHeight = $derived(totalRows * cellHeight);
-	const totalGridCols = $derived(Array.from({ length: totalCols + 1 }, (_, c) => c));
-	const totalGridRows = $derived(Array.from({ length: totalRows + 1 }, (_, r) => r));
-
-	// Offsets for content
-	const offsetX = $derived(parsedMargin.left * cellAspect);
-	const offsetY = $derived(parsedMargin.top * cellHeight);
-
-	const viewBox = $derived(`0 0 ${fmt(viewBoxWidth)} ${fmt(viewBoxHeight)}`);
-
-	// Intrinsic size: px per viewBox unit (cellSize pins the on-screen scale too)
-	const unitPx = $derived(cellSize ?? baseSize);
-	const intrinsicWidth = $derived(fmt(viewBoxWidth * unitPx));
-	const intrinsicHeight = $derived(fmt(viewBoxHeight * unitPx));
-
-	// One <tspan> per styled run, with an absolute x per code point so glyphs sit
-	// on the cell grid regardless of font metrics. Multi-code-point clusters
-	// (ZWJ emoji etc.) get their own tspan — an x list would tear them apart.
-	// Backgrounds are separate full-cell <rect> runs painted behind the text,
-	// merged independently of foreground style changes so blocks stay solid.
-	//
-	// Runs are built in column units (the expensive segmentation pass, depends
-	// only on the text) and mapped to coordinates in a separate derived, so
-	// geometry-only prop changes (margin, fontSize, cellAspect) skip the
-	// rebuild. The build also yields each row's display width, so the text is
-	// segmented exactly once.
-	interface ColRun {
-		class?: string;
-		fill?: string;
-		cols: number[];
-		text: string;
-	}
-	interface ColBg {
-		class?: string;
-		fill?: string;
-		start: number;
-		end: number;
-	}
-	interface Run {
-		class?: string;
-		fill?: string;
-		xs: string;
-		text: string;
-	}
-	interface BgRun {
-		class?: string;
-		fill?: string;
-		x: string;
-		width: string;
-	}
-
-	// center glyphs that are smaller than the cell: horizontal inset per cell,
-	// and the baseline (0.8 within a full cell) shifted into the centered band
-	const glyphInset = $derived(((1 - fontSize) / 2) * cellAspect);
-	const baselineY = $derived(((1 - fontSize) / 2 + 0.8 * fontSize) * cellHeight);
-
-	function buildRuns(rowSpans: Span[]): { runs: ColRun[]; bgs: ColBg[]; width: number } {
-		const runs: ColRun[] = [];
-		const bgs: ColBg[] = [];
-		let col = 0;
-		let cur: ColRun | null = null;
-		let bgCur: { class?: string; fill?: string; start: number } | null = null;
-		const flush = () => {
-			if (cur && cur.text) runs.push(cur);
-			cur = null;
-		};
-		const bgFlush = () => {
-			if (bgCur && col > bgCur.start)
-				bgs.push({ class: bgCur.class, fill: bgCur.fill, start: bgCur.start, end: col });
-			bgCur = null;
-		};
-		const put = (cls: string | undefined, fill: string | undefined, cluster: string, w: number) => {
-			if ([...cluster].length > 1) {
-				flush();
-				runs.push({ class: cls, fill, cols: [col], text: cluster });
-			} else {
-				if (!cur || cur.class !== cls || cur.fill !== fill) {
-					flush();
-					cur = { class: cls, fill, cols: [], text: '' };
-				}
-				cur.cols.push(col);
-				cur.text += cluster;
-			}
-			col += w;
-		};
-		for (const span of rowSpans) {
-			const hasBg = span.bgClass !== undefined || span.bgFill !== undefined;
-			if (bgCur && (!hasBg || bgCur.class !== span.bgClass || bgCur.fill !== span.bgFill))
-				bgFlush();
-			if (hasBg && !bgCur) bgCur = { class: span.bgClass, fill: span.bgFill, start: col };
-			for (const cl of clusters(span.text)) {
-				const w = clusterWidth(cl);
-				if (w === 0) continue;
-				put(span.class, span.fill, cl, w);
-			}
-		}
-		bgFlush();
-		flush();
-		return { runs, bgs, width: col };
-	}
-
-	const renderRuns = $derived.by(() => {
-		const cellX = (c: number) => fmt(offsetX + c * cellAspect + glyphInset);
-		return Array.from({ length: renderRows }, (_, r) => {
-			const built = builtRows[r];
-			if (!built) return { runs: [] as Run[], bgs: [] as BgRun[] };
-			return {
-				runs: built.runs.map((run) => ({
-					class: run.class,
-					fill: run.fill,
-					xs: run.cols.map(cellX).join(' '),
-					text: run.text
-				})),
-				bgs: built.bgs.map((b) => ({
-					class: b.class,
-					fill: b.fill,
-					x: fmt(offsetX + b.start * cellAspect),
-					width: fmt((b.end - b.start) * cellAspect)
-				}))
-			};
-		});
-	});
+	// no auto accessible name: a labelled svg is an image, an unlabelled one is
+	// decorative (ARIA prohibits naming presentational elements)
+	const role = $derived(
+		(rest.role as string | undefined) ??
+			(rest['aria-label'] || rest['aria-labelledby'] ? 'img' : 'presentation')
+	);
 </script>
 
 <!-- component attributes first, {...rest} after: consumer-passed viewBox /
      width / height / overflow / preserveAspectRatio override the computed
-     ones; role, aria-label and style merge the consumer values explicitly -->
+     ones; role and style merge the consumer values explicitly -->
 <svg
-	bind:this={svg}
-	{viewBox}
-	width={intrinsicWidth}
-	height={intrinsicHeight}
+	bind:this={svgEl}
+	viewBox={model.viewBox}
+	width={model.width}
+	height={model.height}
 	overflow="hidden"
 	preserveAspectRatio="xMinYMin meet"
 	xmlns="http://www.w3.org/2000/svg"
 	{...rest}
 	{role}
-	aria-label={ariaLabel}
-	style="{cellSize === undefined
-		? 'width: 100%; height: 100%; '
-		: ''}font-family: var(--ascii-font-family, {defaultFontStack});{rest.style
+	class="asciiart{rest.class ? ` ${rest.class}` : ''}"
+	style="width: 100%; height: 100%; font-family: var(--ascii-font-family, {DEFAULT_FONT_STACK});{rest.style
 		? ` ${rest.style}`
 		: ''}"
 >
-	{#each renderRuns as row, r}
+	<!-- Svelte reserves literal style tags for component CSS, so the theme
+	     block goes in via svelte:element -->
+	<svelte:element this={"style"}>{THEME_CSS}</svelte:element>
+
+	{#if cellAspect === 'auto'}
+		<!-- hidden font probe: its bounding box changes whenever the resolved
+		     font does, which is what triggers re-measurement -->
+		<text bind:this={probeEl} visibility="hidden" font-size="100" aria-hidden="true">M</text>
+	{/if}
+
+	{#each model.rows as row}
 		{#each row.bgs as b}
-			<rect
-				class={b.class}
-				style:fill={b.fill}
-				x={b.x}
-				y={fmt(offsetY + r * cellHeight)}
-				width={b.width}
-				height={fmt(cellHeight)}
-			/>
+			<rect class={b.class} style:fill={b.fill} x={b.x} y={b.y} width={b.width} height={b.height} />
 		{/each}
 	{/each}
 
-	{#if grid}
+	{#if model.grid}
 		<path
-			class={gridClass}
-			d={[
-				...totalGridCols.map((c) => `M ${fmt(c * cellAspect)} 0 V ${fmt(totalRows * cellHeight)}`),
-				...totalGridRows.map((r) => `M 0 ${fmt(r * cellHeight)} H ${fmt(totalCols * cellAspect)}`)
-			].join(' ')}
+			class={model.grid.class}
+			d={model.grid.d}
 			fill="none"
+			stroke={model.grid.stroke}
+			stroke-opacity={model.grid.strokeOpacity}
+			stroke-width={model.grid.strokeWidth}
 		/>
 	{/if}
 
-	{#if frame}
+	{#if model.frame}
 		<rect
-			class={frameClass}
-			x={fmt(offsetX)}
-			y={fmt(offsetY)}
-			width={fmt(frameCols * cellAspect)}
-			height={fmt(frameRows * cellHeight)}
+			class={model.frame.class}
+			x={model.frame.x}
+			y={model.frame.y}
+			width={model.frame.width}
+			height={model.frame.height}
 			fill="none"
+			stroke={model.frame.stroke}
+			stroke-width={model.frame.strokeWidth}
 		/>
 	{/if}
 
-	{#each renderRuns as row, r}
-		<text
-			y={fmt(offsetY + r * cellHeight + baselineY)}
-			font-size={fmt(fontSize * cellHeight)}
-			fill="currentColor"
-			xml:space="preserve"
-		>
-			{#each row.runs as run}
-				<tspan class={run.class} style:fill={run.fill} x={run.xs}>{run.text}</tspan>
-			{/each}
-		</text>
+	{#each model.rows as row}
+		{#if row.runs.length}
+			<text y={row.y} font-size={model.fontSize} fill="currentColor" xml:space="preserve">
+				{#each row.runs as run}
+					<tspan class={run.class} style:fill={run.fill} x={run.x}>{run.text}</tspan>
+				{/each}
+			</text>
+		{/if}
 	{/each}
 </svg>
-
-<style>
-	/* ANSI 16-color palette, themeable per host via --ansi-fg-* custom properties */
-	svg :global(.ansi-bold) {
-		font-weight: bold;
-	}
-	svg :global(.ansi-dim) {
-		opacity: 0.6;
-	}
-	svg :global(.ansi-italic) {
-		font-style: italic;
-	}
-	svg :global(.ansi-underline) {
-		text-decoration: underline;
-	}
-	svg :global(.ansi-strike) {
-		text-decoration: line-through;
-	}
-	svg :global(.ansi-underline.ansi-strike) {
-		text-decoration: underline line-through;
-	}
-	/* inverse with no explicit fg: glyph paints in the default background color
-	   (host overrides --ansi-default-bg to match its page) */
-	svg :global(.ansi-inverse) {
-		fill: var(--ansi-default-bg, Canvas);
-	}
-	/* inverse with no explicit colors: the block paints in the default text color */
-	svg :global(.ansi-bg-inverse) {
-		fill: currentColor;
-	}
-	/* .ansi-blink is emitted but unstyled by default — hosts opt in */
-	svg :global(.ansi-fg-30) {
-		fill: var(--ansi-fg-30, #000000);
-	}
-	svg :global(.ansi-fg-31) {
-		fill: var(--ansi-fg-31, #cd3131);
-	}
-	svg :global(.ansi-fg-32) {
-		fill: var(--ansi-fg-32, #00a600);
-	}
-	svg :global(.ansi-fg-33) {
-		fill: var(--ansi-fg-33, #b58900);
-	}
-	svg :global(.ansi-fg-34) {
-		fill: var(--ansi-fg-34, #0451a5);
-	}
-	svg :global(.ansi-fg-35) {
-		fill: var(--ansi-fg-35, #bc05bc);
-	}
-	svg :global(.ansi-fg-36) {
-		fill: var(--ansi-fg-36, #0598bc);
-	}
-	svg :global(.ansi-fg-37) {
-		fill: var(--ansi-fg-37, #a5a5a5);
-	}
-	svg :global(.ansi-fg-90) {
-		fill: var(--ansi-fg-90, #666666);
-	}
-	svg :global(.ansi-fg-91) {
-		fill: var(--ansi-fg-91, #f14c4c);
-	}
-	svg :global(.ansi-fg-92) {
-		fill: var(--ansi-fg-92, #23d18b);
-	}
-	svg :global(.ansi-fg-93) {
-		fill: var(--ansi-fg-93, #f5f543);
-	}
-	svg :global(.ansi-fg-94) {
-		fill: var(--ansi-fg-94, #3b8eea);
-	}
-	svg :global(.ansi-fg-95) {
-		fill: var(--ansi-fg-95, #d670d6);
-	}
-	svg :global(.ansi-fg-96) {
-		fill: var(--ansi-fg-96, #29b8db);
-	}
-	svg :global(.ansi-fg-97) {
-		fill: var(--ansi-fg-97, #ffffff);
-	}
-	svg :global(.ansi-bg-40) {
-		fill: var(--ansi-bg-40, #000000);
-	}
-	svg :global(.ansi-bg-41) {
-		fill: var(--ansi-bg-41, #cd3131);
-	}
-	svg :global(.ansi-bg-42) {
-		fill: var(--ansi-bg-42, #00a600);
-	}
-	svg :global(.ansi-bg-43) {
-		fill: var(--ansi-bg-43, #b58900);
-	}
-	svg :global(.ansi-bg-44) {
-		fill: var(--ansi-bg-44, #0451a5);
-	}
-	svg :global(.ansi-bg-45) {
-		fill: var(--ansi-bg-45, #bc05bc);
-	}
-	svg :global(.ansi-bg-46) {
-		fill: var(--ansi-bg-46, #0598bc);
-	}
-	svg :global(.ansi-bg-47) {
-		fill: var(--ansi-bg-47, #a5a5a5);
-	}
-	svg :global(.ansi-bg-100) {
-		fill: var(--ansi-bg-100, #666666);
-	}
-	svg :global(.ansi-bg-101) {
-		fill: var(--ansi-bg-101, #f14c4c);
-	}
-	svg :global(.ansi-bg-102) {
-		fill: var(--ansi-bg-102, #23d18b);
-	}
-	svg :global(.ansi-bg-103) {
-		fill: var(--ansi-bg-103, #f5f543);
-	}
-	svg :global(.ansi-bg-104) {
-		fill: var(--ansi-bg-104, #3b8eea);
-	}
-	svg :global(.ansi-bg-105) {
-		fill: var(--ansi-bg-105, #d670d6);
-	}
-	svg :global(.ansi-bg-106) {
-		fill: var(--ansi-bg-106, #29b8db);
-	}
-	svg :global(.ansi-bg-107) {
-		fill: var(--ansi-bg-107, #ffffff);
-	}
-</style>

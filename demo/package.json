@@ -4,12 +4,14 @@
 	"version": "0.0.1",
 	"type": "module",
 	"dependencies": {
+		"lovely-ansi-svg": "workspace:*",
+		"lovely-svg-png": "workspace:*",
 		"svelte-asciiart": "workspace:*"
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "bun --cwd=../packages/svelte-asciiart run prepack && vite build",
-		"build:demo": "bun --cwd=../packages/svelte-asciiart run prepack && BASE_PATH=/svelte-asciiart vite build",
+		"build": "bun --cwd=../packages/lovely-ansi-svg run build && bun --cwd=../packages/svelte-asciiart run prepack && vite build",
+		"build:demo": "bun --cwd=../packages/lovely-ansi-svg run build && bun --cwd=../packages/svelte-asciiart run prepack && BASE_PATH=/svelte-asciiart vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
