@@ -1,7 +1,7 @@
 import { parseAnsi } from './ansi.js';
 import { fmt } from './fmt.js';
-import { layout, type LayoutRow } from './layout.js';
-import { defaultTheme, themeCss, type Theme } from './theme.js';
+import { layout, type GlyphRun, type LayoutRow } from './layout.js';
+import { defaultTheme, type Theme } from './theme.js';
 
 export type Margin = number | [number, number] | [number, number, number, number];
 
@@ -28,15 +28,15 @@ export interface RenderOptions {
 }
 
 export interface RenderedRun {
-	class?: string;
-	fill?: string;
+	/** Inline CSS (fill, font-weight, …); absent for default-styled text. */
+	style?: string;
 	/** space-separated x list, one per code point */
 	x: string;
 	text: string;
 }
 export interface RenderedBg {
-	class?: string;
-	fill?: string;
+	/** Inline CSS (the background fill). */
+	style: string;
 	x: string;
 	y: string;
 	width: string;
@@ -65,6 +65,19 @@ export interface RenderModel {
 }
 
 const clampDim = (n: number | undefined) => (n === undefined || !Number.isFinite(n) ? undefined : Math.max(0, Math.floor(n)));
+
+// one inline-CSS string per run: colors and font styling ride as `style` so
+// host/extra CSS rules can't accidentally override them
+function runStyle(run: GlyphRun): string | undefined {
+	const parts: string[] = [];
+	if (run.fill) parts.push(`fill: ${run.fill}`);
+	if (run.bold) parts.push('font-weight: bold');
+	if (run.italic) parts.push('font-style: italic');
+	if (run.underline || run.strike)
+		parts.push(`text-decoration:${run.underline ? ' underline' : ''}${run.strike ? ' line-through' : ''}`);
+	// blink is parsed but deliberately not rendered
+	return parts.length ? parts.join('; ') : undefined;
+}
 
 function parseMargin(m: Margin): { top: number; right: number; bottom: number; left: number } {
 	if (typeof m === 'number') return { top: m, right: m, bottom: m, left: m };
@@ -107,14 +120,12 @@ export function render(layoutRows: LayoutRow[], options: RenderOptions = {}): Re
 		return {
 			y: fmt(offsetY + r + baselineY),
 			runs: built.runs.map((run) => ({
-				class: run.class,
-				fill: run.fill,
+				style: runStyle(run),
 				x: run.cols.map(cellX).join(' '),
 				text: run.text
 			})),
 			bgs: built.bgs.map((b) => ({
-				class: b.class,
-				fill: b.fill,
+				style: `fill: ${b.fill}`,
 				x: fmt(offsetX + b.start * cellAspect),
 				y: fmt(offsetY + r),
 				width: fmt((b.end - b.start) * cellAspect),
@@ -160,7 +171,7 @@ export function render(layoutRows: LayoutRow[], options: RenderOptions = {}): Re
 export const DEFAULT_FONT_STACK = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
 export interface ExportSvgOptions extends RenderOptions {
-	/** Theme resolved into the emitted CSS (still overridable via `--ansi-*` vars). */
+	/** Theme the ANSI colors resolve through. */
 	theme?: Theme;
 	/** font-family for the text; default: a generic monospace stack. */
 	fontFamily?: string;
@@ -177,17 +188,17 @@ const attr = (name: string, value: string | undefined) => (value === undefined ?
 
 /**
  * Render ANSI/ASCII text to a standalone SVG string. Pure text → string, no
- * DOM: usable in Node, SSR, workers. Colors resolve from `theme` but stay
- * behind `var(--ansi-*)` fallbacks; fonts are named, not embedded — pass
- * `@font-face` CSS (e.g. from lovely-svg-png's `collectFontCss`) via
- * `extraCss` to make the file font-standalone.
+ * DOM: usable in Node, SSR, workers. Colors resolve from `theme` into
+ * concrete values; fonts are named, not embedded — pass `@font-face` CSS
+ * (e.g. from lovely-svg-png's `collectFontCss`) via `extraCss` to make the
+ * file font-standalone.
  */
 export function exportSvg(text: string, options: ExportSvgOptions = {}): string {
 	const base = options.theme ?? defaultTheme;
 	// a painted background rect is the backdrop dim/inverse mix toward, unless
 	// the theme explicitly says otherwise
 	const theme = base.background === undefined && options.background !== undefined ? { ...base, background: options.background } : base;
-	const model = render(layout(parseAnsi(text)), options);
+	const model = render(layout(parseAnsi(text, theme)), options);
 	const out: string[] = [];
 
 	const rootStyle = theme.foreground ? `color: ${theme.foreground}` : undefined;
@@ -200,8 +211,7 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 			`>`
 	);
 
-	const css = [themeCss(theme), options.extraCss].filter(Boolean).join('\n');
-	out.push(`<defs><style>${escText(css)}</style></defs>`);
+	if (options.extraCss) out.push(`<defs><style>${escText(options.extraCss)}</style></defs>`);
 
 	if (options.background) {
 		const [, , w, h] = model.viewBox.split(' ');
@@ -210,10 +220,7 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 
 	for (const row of model.rows)
 		for (const b of row.bgs)
-			out.push(
-				`<rect${attr('class', b.class)}${attr('style', b.fill && `fill: ${b.fill}`)}` +
-					` x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"/>`
-			);
+			out.push(`<rect${attr('style', b.style)} x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"/>`);
 
 	if (model.grid)
 		out.push(
@@ -235,11 +242,7 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 	for (const row of model.rows) {
 		if (!row.runs.length) continue;
 		const tspans = row.runs
-			.map(
-				(run) =>
-					`<tspan${attr('class', run.class)}${attr('style', run.fill && `fill: ${run.fill}`)}` +
-					` x="${run.x}">${escText(run.text)}</tspan>`
-			)
+			.map((run) => `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`)
 			.join('');
 		// xml:space on each <text>: rasterizers don't reliably inherit it from
 		// the root, and collapsed space runs would mis-slot the per-char x list

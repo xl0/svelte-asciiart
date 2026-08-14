@@ -10,17 +10,18 @@
 - Renamed `fontSize` to `glyphScale`.
 - Removed `baseSize`; `cellSize` now sets the intrinsic size (pixels per cell, default 50). The svg always stretches to its container — pass `style="width: auto; height: auto"` for a fixed on-screen scale.
 - Merged `gridClass`/`frameClass` into `grid`/`frame` (`boolean | string`, the string being the CSS class); `grid`/`frame` without a class now draw with a default currentColor stroke instead of invisibly.
-- `cellAspect` defaults to `'auto'`: the aspect and baseline are canvas-measured from the rendered font (after `document.fonts.ready`, re-measured on webfont loads). Pass a number to pin the previous fixed 0.6 geometry.
+- `cellAspect` defaults to `'auto'`: the aspect and baseline are canvas-measured from the rendered font, re-measured whenever the resolved font changes (ancestor `--ascii-font-family` flips, style/class changes, webfont loads). Pass a number to pin the previous fixed 0.6 geometry.
+- ANSI colors resolve through the new `theme` prop (16-color palette + default fg/bg, VS Code-ish default). The `ansi-*` CSS classes and `--ansi-*` custom properties are gone — re-theme by passing a theme instead; blink is parsed but no longer styleable.
 - The svg no longer takes its accessible name from the art text: pass `aria-label` yourself for `role="img"`; without a label the svg renders as `role="presentation"`.
 
 ### Added
 
 - `measureCellMetrics(fontFamily)` export: the canvas measurement the component uses for `cellAspect: 'auto'`; its `{cellAspect, baseline}` result spreads straight into `exportSvg` options so exports match the live auto-aspect render.
+- `theme` prop: the color theme ANSI escapes resolve through; `theme.foreground` sets the default text color.
 
 ### Changed
 
-- The `ansi-*` theme CSS is emitted as an inline `<style>` block inside the svg (previously component-scoped CSS); theming via `--ansi-*` custom properties works as before.
-- Dim renders as a solid `color-mix()` toward `--ansi-default-bg` instead of `opacity: 0.6` — overlapping full-cell glyphs no longer double-composite into stripes.
+- Dim renders as a solid `color-mix()` toward the theme background instead of `opacity: 0.6` — overlapping full-cell glyphs no longer double-composite into stripes.
 
 ## [0.0.6] - 2026-08-13
 

@@ -1,6 +1,6 @@
 export { parseAnsi, type ParsedRow, type Style, type StyleBreak } from './ansi.js';
 export { layout, layoutRow, type BgRun, type GlyphRun, type LayoutRow } from './layout.js';
-export { defaultTheme, themeCss, type Theme } from './theme.js';
+export { defaultTheme, type Theme } from './theme.js';
 export {
 	DEFAULT_FONT_STACK,
 	exportSvg,

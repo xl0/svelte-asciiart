@@ -1,20 +1,25 @@
-import { DIM_PCT } from './theme.js';
+import { defaultTheme, DIM_PCT, type Theme } from './theme.js';
 import { displayWidth } from './width.js';
 
 /**
- * Style of a run of text.
+ * Resolved style of a run of text. Colors are resolved through the theme at
+ * parse time — there is no later theming pass.
  *
- * - `class`/`fill`: foreground — CSS class(es) (`ansi-bold`, `ansi-fg-31`, …,
- *   themeable via `--ansi-fg-*` vars) and/or a concrete color (256-color /
- *   truecolor) applied as inline style.
- * - `bgClass`/`bgFill`: background — same split, painted as a full-cell rect
- *   behind the text (`ansi-bg-41`, …, themeable via `--ansi-bg-*`).
+ * - `fill`: foreground color; unset → `currentColor` (inherits the default
+ *   text color). 16-color codes resolve through the theme palette; 256-color
+ *   and truecolor are concrete; dim is baked in as a `color-mix()` toward the
+ *   backdrop.
+ * - `bgFill`: background color, painted as a full-cell rect behind the text.
+ * - The flags map to font styling; `blink` is parsed but not rendered.
  */
 export interface Style {
-	class?: string;
 	fill?: string;
-	bgClass?: string;
 	bgFill?: string;
+	bold?: boolean;
+	italic?: boolean;
+	underline?: boolean;
+	strike?: boolean;
+	blink?: boolean;
 }
 
 /** A style change: `style` applies from code-unit `offset` to the next break (or end of row). */
@@ -66,8 +71,8 @@ const ATTR_OFF: Record<number, string[]> = {
 	27: ['inverse'],
 	29: ['strike']
 };
-// stable class order for styleOf; inverse is handled as a fg/bg swap instead
-const ATTR_ORDER = ['bold', 'dim', 'italic', 'underline', 'blink', 'strike'];
+// flags copied onto Style verbatim; dim and inverse are resolved into colors
+const ATTR_FLAGS = ['bold', 'italic', 'underline', 'strike', 'blink'] as const;
 
 /** xterm 256-color index → hex, for indices >= 16 (cube + grayscale ramp). */
 function xterm256(n: number): string {
@@ -143,39 +148,32 @@ function applySgr(state: SgrState, params: number[]): void {
 	}
 }
 
-function styleOf(state: SgrState): Style {
-	const classes: string[] = [];
-	for (const a of ATTR_ORDER) if (state.attrs.has(a)) classes.push(`ansi-${a}`);
-
-	let { fgCode, fgFill, bgCode, bgFill } = state;
-	let bgClass: string | undefined;
-	if (state.attrs.has('inverse')) {
-		// swap fg and bg (class codes differ by 10). A missing bg becomes an
-		// ansi-bg-inverse block (CSS: currentColor, the default fg); a missing
-		// fg is marked with ansi-inverse so CSS can paint it in the default
-		// background color.
-		[fgCode, fgFill, bgCode, bgFill] = [
-			bgCode !== undefined ? bgCode - 10 : undefined,
-			bgFill,
-			fgCode !== undefined ? fgCode + 10 : undefined,
-			fgFill
-		];
-		if (fgCode === undefined && fgFill === undefined) classes.push('ansi-inverse');
-		if (bgCode === undefined && bgFill === undefined) bgClass = 'ansi-bg-inverse';
-	}
-	if (fgCode !== undefined) classes.push(`ansi-fg-${fgCode}`);
-	// concrete fills are applied inline (beating class rules), so dim — a
-	// solid mix toward the background in the theme CSS — is baked in here
-	if (fgFill !== undefined && state.attrs.has('dim')) fgFill = `color-mix(in srgb, ${fgFill} ${DIM_PCT}, var(--ansi-default-bg, var(--_ansi-default-bg, Canvas)))`;
-	return {
-		class: classes.length ? classes.join(' ') : undefined,
-		fill: fgFill,
-		bgClass: bgCode !== undefined ? `ansi-bg-${bgCode}` : bgClass,
-		bgFill
-	};
+function styleOf(state: SgrState, theme: Theme): Style {
+	// 16-color codes index the theme palette: 30-37/40-47 → 0-7, 90-97/100-107 → 8-15
+	let fill = state.fgFill ?? (state.fgCode !== undefined ? theme.palette[state.fgCode < 40 ? state.fgCode - 30 : state.fgCode - 82] : undefined);
+	let bgFill = state.bgFill ?? (state.bgCode !== undefined ? theme.palette[state.bgCode < 50 ? state.bgCode - 40 : state.bgCode - 92] : undefined);
+	const defaultBg = theme.background ?? 'Canvas';
+	// inverse is a fg/bg swap: a missing bg becomes a default-text-color block,
+	// a missing fg paints the glyphs in the default background color
+	if (state.attrs.has('inverse')) [fill, bgFill] = [bgFill ?? defaultBg, fill ?? 'currentColor'];
+	// dim is a solid mix toward the backdrop, not opacity — overlapping
+	// full-cell glyphs (box drawing) would double-composite into stripes
+	if (state.attrs.has('dim')) fill = `color-mix(in srgb, ${fill ?? 'currentColor'} ${DIM_PCT}, ${bgFill ?? defaultBg})`;
+	const style: Style = {};
+	if (fill !== undefined) style.fill = fill;
+	if (bgFill !== undefined) style.bgFill = bgFill;
+	for (const a of ATTR_FLAGS) if (state.attrs.has(a)) style[a] = true;
+	return style;
 }
 
-const sameStyle = (a: Style, b: Style) => a.class === b.class && a.fill === b.fill && a.bgClass === b.bgClass && a.bgFill === b.bgFill;
+const sameStyle = (a: Style, b: Style) =>
+	a.fill === b.fill &&
+	a.bgFill === b.bgFill &&
+	a.bold === b.bold &&
+	a.italic === b.italic &&
+	a.underline === b.underline &&
+	a.strike === b.strike &&
+	a.blink === b.blink;
 
 // SGR (group 1 captures params; ':' admits ITU T.416 colon subparams, which
 // applySgr then skips as unknown), other CSI sequences (params + intermediates
@@ -192,19 +190,19 @@ const C0_RE = /[\x00-\x09\x0b-\x1f\x7f]/;
 
 /**
  * Parse text containing ANSI SGR escapes into rows of escape-stripped text
- * with style breakpoints. Style state persists across lines until reset.
- * Supported: 16-color, 256-color and truecolor foregrounds and backgrounds;
- * bold, dim, italic, underline, blink, strikethrough; inverse (rendered as a
- * fg/bg swap); resets. Unknown codes are consumed without effect; non-SGR
- * escapes are stripped. Tabs are expanded to 8-column stops; other C0
- * controls are dropped. On plain text this degenerates to one break-free row
- * per line.
+ * with style breakpoints, with colors resolved through `theme`. Style state
+ * persists across lines until reset. Supported: 16-color, 256-color and
+ * truecolor foregrounds and backgrounds; bold, dim, italic, underline, blink,
+ * strikethrough; inverse (resolved as a fg/bg swap); resets. Unknown codes
+ * are consumed without effect; non-SGR escapes are stripped. Tabs are
+ * expanded to 8-column stops; other C0 controls are dropped. On plain text
+ * this degenerates to one break-free row per line.
  *
  * Escapes are matched over the whole text, not per line: control-string
  * payloads (OSC/DCS/APC/PM/SOS) may legally contain newlines, which must not
  * become row breaks. Rows split only on `\r?\n` in plain chunks.
  */
-export function parseAnsi(text: string): ParsedRow[] {
+export function parseAnsi(text: string, theme: Theme = defaultTheme): ParsedRow[] {
 	const state: SgrState = { attrs: new Set() };
 	let curStyle: Style = {};
 	const rows: ParsedRow[] = [{ text: '', breaks: [] }];
@@ -259,7 +257,7 @@ export function parseAnsi(text: string): ParsedRow[] {
 		pos = m.index + m[0].length;
 		if (m[1] !== undefined) {
 			applySgr(state, m[1].split(';').map(Number));
-			curStyle = styleOf(state);
+			curStyle = styleOf(state, theme);
 		}
 	}
 	plain(text.slice(pos));

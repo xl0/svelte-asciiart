@@ -2,33 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { parseAnsi } from './ansi.js';
 import { layout } from './layout.js';
 import { exportSvg, render } from './svg.js';
-import { defaultTheme, themeCss } from './theme.js';
+import { defaultTheme } from './theme.js';
 
 const E = '\x1b';
 const model = (text: string, opts = {}) => render(layout(parseAnsi(text)), opts);
-
-describe('themeCss', () => {
-	it('resolves palette colors behind var() fallbacks', () => {
-		const css = themeCss();
-		expect(css).toContain('.ansi-fg-31 { fill: var(--ansi-fg-31, #cd3131) }');
-		expect(css).toContain('.ansi-bg-107 { fill: var(--ansi-bg-107, #ffffff) }');
-	});
-
-	it('dims as a solid color mix, not opacity, including per-color combos', () => {
-		const css = themeCss();
-		expect(css).toContain('.ansi-dim { fill: color-mix(in srgb, currentColor 55%, var(--ansi-default-bg, Canvas)) }');
-		expect(css).toContain(
-			'.ansi-dim.ansi-fg-31 { fill: color-mix(in srgb, var(--ansi-fg-31, #cd3131) 55%, var(--ansi-default-bg, Canvas)) }'
-		);
-		expect(css).not.toContain('opacity');
-	});
-
-	it('uses the theme background for inverse and leaves blink unstyled', () => {
-		const css = themeCss({ ...defaultTheme, background: '#123456' });
-		expect(css).toContain('.ansi-inverse { fill: var(--ansi-default-bg, #123456) }');
-		expect(css).not.toContain('.ansi-blink');
-	});
-});
 
 describe('render', () => {
 	it('computes the viewBox from frame + margin in cell units', () => {
@@ -73,23 +50,30 @@ describe('render', () => {
 	it('maps background runs to full-cell rects', () => {
 		const m = model(`${E}[41mab`);
 		expect(m.rows[0].bgs[0]).toEqual({
-			class: 'ansi-bg-41',
-			fill: undefined,
+			style: 'fill: #cd3131',
 			x: '0',
 			y: '0',
 			width: '1.2',
 			height: '1'
 		});
 	});
+
+	it('formats run styling as one inline-CSS string', () => {
+		const m = model(`${E}[1;3;4;9;31mx`);
+		expect(m.rows[0].runs[0].style).toBe(
+			'fill: #cd3131; font-weight: bold; font-style: italic; text-decoration: underline line-through'
+		);
+	});
 });
 
 describe('exportSvg', () => {
-	it('produces a standalone SVG with theme CSS and positioned tspans', () => {
-		const svg = exportSvg(`${E}[31mhi`);
+	it('produces a standalone SVG with resolved inline styles', () => {
+		const svg = exportSvg(`${E}[1;31mhi`);
 		expect(svg).toContain('viewBox="0 0 1.2 1"');
-		expect(svg).toContain('.ansi-fg-31 { fill: var(--ansi-fg-31, #cd3131) }');
-		expect(svg).toContain('<tspan class="ansi-fg-31" x="0 0.6">hi</tspan>');
+		expect(svg).toContain('<tspan style="fill: #cd3131; font-weight: bold" x="0 0.6">hi</tspan>');
 		expect(svg).toContain('font-size="1"');
+		// no CSS block unless extraCss asks for one
+		expect(svg).not.toContain('<style>');
 	});
 
 	it('escapes XML metacharacters in text and attributes', () => {
@@ -116,10 +100,11 @@ describe('exportSvg', () => {
 	});
 
 	it('defaults the theme background to the painted background', () => {
-		expect(exportSvg('a', { background: '#123456' })).toContain('.ansi-inverse { fill: var(--ansi-default-bg, #123456) }');
+		// inverse-without-fg glyphs paint in the effective background
+		expect(exportSvg(`${E}[7ma`, { background: '#123456' })).toContain('style="fill: #123456"');
 		// an explicit theme background wins
-		expect(exportSvg('a', { background: '#123456', theme: { ...defaultTheme, background: '#000' } })).toContain(
-			'.ansi-inverse { fill: var(--ansi-default-bg, #000) }'
+		expect(exportSvg(`${E}[7ma`, { background: '#123456', theme: { ...defaultTheme, background: '#000' } })).toContain(
+			'style="fill: #000"'
 		);
 	});
 

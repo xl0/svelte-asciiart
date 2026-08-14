@@ -56,13 +56,13 @@ const svg = exportSvg(text, {
 | `glyphScale` | `number`                        | `1`         | Glyph size as a fraction of cell height (1 = box-drawing tiles)         |
 | `cellSize`   | `number`                        | `50`        | Pixels per cell for the intrinsic `width`/`height` attributes           |
 | `fontFamily` | `string`                        | mono stack  | `font-family` for the text (named, not embedded)                        |
-| `theme`      | `Theme`                         | VS Code-ish | 16-color palette + default fg/bg, resolved into the emitted CSS         |
+| `theme`      | `Theme`                         | VS Code-ish | 16-color palette + default fg/bg the ANSI colors resolve through        |
 | `background` | `string`                        | —           | Solid background rect; doubles as `theme.background` unless that is set |
-| `extraCss`   | `string`                        | —           | CSS appended to the `<style>` block (`@font-face`, grid/frame classes…) |
+| `extraCss`   | `string`                        | —           | CSS emitted in a `<style>` block (`@font-face`, grid/frame classes…)    |
 
 ### ANSI support
 
-16-color, 256-color (`38;5;n`) and truecolor (`38;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; per-attribute resets. Style state persists across lines. Unknown codes are consumed; non-SGR escapes (cursor movement, OSC hyperlinks, DCS/sixel payloads — even spanning newlines) are stripped. Tabs expand to 8-column stops. CJK and emoji occupy two cells; grapheme clusters (ZWJ emoji, combining marks) are never torn apart, even by escapes.
+16-color, 256-color (`38;5;n`) and truecolor (`38;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; per-attribute resets (blink is parsed but not rendered). Style state persists across lines. Unknown codes are consumed; non-SGR escapes (cursor movement, OSC hyperlinks, DCS/sixel payloads — even spanning newlines) are stripped. Tabs expand to 8-column stops. CJK and emoji occupy two cells; grapheme clusters (ZWJ emoji, combining marks) are never torn apart, even by escapes.
 
 ### Theming
 
@@ -80,41 +80,18 @@ interface Theme {
 }
 ```
 
-The parser never resolves the 16 base colors to values — it tags text with classes named after the SGR codes, and the palette maps onto them positionally:
+All colors resolve through the theme once, at parse time — the output carries concrete values as inline styles, no CSS classes or custom properties. Re-theming means re-rendering with a different theme. The 16 base colors (and `38;5;n` with n < 16) index the palette positionally: SGR 30–37/40–47 → entries 0–7, 90–97/100–107 → 8–15. The extended 256-color palette (the 6×6×6 cube and the grayscale ramp) and truecolor have spec-fixed RGB values and bypass the theme entirely.
 
-| Palette index | Foreground class              | Background class                |
-| ------------- | ----------------------------- | ------------------------------- |
-| 0–7 (normal)  | `.ansi-fg-30` … `.ansi-fg-37` | `.ansi-bg-40` … `.ansi-bg-47`   |
-| 8–15 (bright) | `.ansi-fg-90` … `.ansi-fg-97` | `.ansi-bg-100` … `.ansi-bg-107` |
+`theme.foreground` sets the SVG root's `color`; unstyled text fills with `currentColor`, so an inline-embedded SVG with no `foreground` simply inherits the page's text color.
 
-The emitted CSS puts each resolved color behind a custom property of the same name:
+**Two background knobs, on purpose.** `theme.background` and the `background` option answer different questions:
 
-```css
-.ansi-fg-31 {
-	fill: var(--ansi-fg-31, #cd3131);
-}
-.ansi-bg-41 {
-	fill: var(--ansi-bg-41, #cd3131);
-}
-```
+- `theme.background` is an _assumption_: "this is the color behind the art." Inverse-without-foreground glyphs paint in it and dim mixes toward it — the color math is meaningless without knowing the backdrop. It paints nothing.
+- `background` (option) is an _action_: paint a solid backdrop rect into the file. Export-only — a standalone file has no page behind it.
 
-That gives two theming layers:
+In practice you set one of them. Painting a backdrop implies it's the backdrop, so `exportSvg` defaults `theme.background` to the `background` option — `exportSvg(text, { background: '#1e1e1e' })` paints dark _and_ dims/inverts against dark. Set `theme.background` alone for the transparent case: an SVG destined for a page that's already dark should compute dim/inverse against that page color without painting over it. Setting both only makes sense when they genuinely disagree, and then the explicit `theme.background` wins the color math.
 
-- **`theme`, at export time** — the palette resolves into the `var()` fallbacks baked into the file. This is what standalone viewers (an `<img>`, a PNG rasterizer, an editor preview) show.
-- **CSS custom properties, at display time** — an SVG embedded _inline_ in a page inherits custom properties, and a set property beats the baked fallback. So the host can re-theme without touching the file:
-
-```css
-/* dark mode: remap the base colors under this container */
-.dark svg {
-	--ansi-fg-30: #666;
-	--ansi-fg-31: #f14c4c;
-	--ansi-default-bg: #1e1e1e;
-}
-```
-
-Available properties: `--ansi-fg-30…37`, `--ansi-fg-90…97`, `--ansi-bg-40…47`, `--ansi-bg-100…107`, and `--ansi-default-bg` (the color inverse-without-foreground glyphs paint in, and what dim fades toward — defaults to `theme.background`). `theme.foreground` sets the root `color`, and unstyled text fills with `currentColor` — so an inline SVG with no `foreground` simply inherits the page's text color. In `exportSvg`, an unset `theme.background` falls back to the painted `background` option — a solid backdrop is what dim/inverse should mix toward.
-
-Only the 16 base colors are themeable, matching how terminals work: those are the colors a terminal scheme defines, while the extended 256-color palette (`38;5;n` with n ≥ 16 — the 6×6×6 cube and the grayscale ramp) has spec-fixed RGB values and truecolor (`38;2;r;g;b`) is literal RGB. Both resolve at parse time and are applied as inline `style="fill: …"` — inline on purpose, so no class rule can override them — and render identically everywhere. (`38;5;n` with n < 16 folds into the base classes above, so it stays themeable.) Dim follows the same split: for classed colors it's handled by `.ansi-dim.ansi-fg-N` combo rules in the CSS; for concrete fills the 55% mix toward `--ansi-default-bg` is baked into the inline fill.
+Dim is a solid `color-mix()` of the glyph color toward its backdrop rather than opacity — overlapping full-cell glyphs (box drawing) would double-composite into stripes.
 
 `defaultTheme` (exported) is a VS Code-ish palette.
 
@@ -130,9 +107,9 @@ const laid = layout(parsed); // LayoutRow[]  — column-grid runs
 const model = render(laid, { frame: true }); // RenderModel — SVG-ready geometry
 ```
 
-### `parseAnsi(text): ParsedRow[]`
+### `parseAnsi(text, theme?): ParsedRow[]`
 
-Parses ANSI SGR escapes into escape-stripped row text plus style breakpoints. No geometry yet — styles are ranges over the text:
+Parses ANSI SGR escapes into escape-stripped row text plus style breakpoints, with all colors resolved through the theme (default: `defaultTheme`). No geometry yet — styles are ranges over the text:
 
 ```ts
 interface ParsedRow {
@@ -143,21 +120,16 @@ interface ParsedRow {
 }
 
 interface Style {
-	/**
-	 * The symbolic part of the foreground: attribute flags and 16-color names,
-	 * e.g. 'ansi-bold ansi-fg-31' — kept as classes so the theme CSS resolves
-	 * them at display time.
-	 */
-	class?: string;
-	/**
-	 * The literal part: a concrete 256-color/truecolor value, e.g.
-	 * 'rgb(255,105,180)' — an open-ended set, so it travels as a value.
-	 * A run can have both: '\x1b[1;38;2;…m' is bold (class) + truecolor (fill).
-	 */
+	/** Resolved foreground color; unset → `currentColor` (inherits the default text color). Dim is baked in as a `color-mix()` toward the backdrop. */
 	fill?: string;
-	/** Same split for the background. */
-	bgClass?: string;
+	/** Resolved background color, painted as a full-cell rect behind the text. */
 	bgFill?: string;
+	/** Font attributes; `blink` is parsed but not rendered. */
+	bold?: boolean;
+	italic?: boolean;
+	underline?: boolean;
+	strike?: boolean;
+	blink?: boolean;
 }
 ```
 
@@ -166,7 +138,7 @@ A break's style applies from its `offset` (in code units) to the next break or t
 ```ts
 parseAnsi('\x1b[1;31mred\x1b[0m ok');
 // [{ text: 'red ok', breaks: [
-//   { offset: 0, style: { class: 'ansi-bold ansi-fg-31' } },
+//   { offset: 0, style: { fill: '#cd3131', bold: true } },
 //   { offset: 3, style: {} }
 // ]}]
 ```
@@ -185,19 +157,18 @@ interface LayoutRow {
 	width: number;
 }
 
-/** A run of glyphs sharing one foreground style. */
+/** A run of glyphs sharing one foreground style (fill + the Style font flags). */
 interface GlyphRun {
-	class?: string;
 	fill?: string;
+	bold?: boolean; // + italic, underline, strike, blink
 	/** Starting column of each grapheme cluster in `text`. */
 	cols: number[];
 	text: string;
 }
 
-/** Full-cell background columns `[start, end)` sharing one bg style. */
+/** Full-cell background columns `[start, end)` sharing one color. */
 interface BgRun {
-	class?: string;
-	fill?: string;
+	fill: string;
 	start: number;
 	end: number;
 }
@@ -206,13 +177,13 @@ interface BgRun {
 ```ts
 layout(parseAnsi('\x1b[43;30mwarn\x1b[0m'));
 // [{
-//   runs: [{ class: 'ansi-fg-30', cols: [0, 1, 2, 3], text: 'warn' }],
-//   bgs: [{ class: 'ansi-bg-43', start: 0, end: 4 }],
+//   runs: [{ fill: '#000000', cols: [0, 1, 2, 3], text: 'warn' }],
+//   bgs: [{ fill: '#b58900', start: 0, end: 4 }],
 //   width: 4
 // }]
 ```
 
-Runs break on foreground style changes; background runs are merged independently, on background style only, so colored blocks stay solid across foreground changes. A multi-code-point cluster (ZWJ emoji, combining marks) always becomes a run of its own with a single `cols` entry, so a per-glyph `x` list can never tear it apart.
+Runs break on foreground style changes; background runs are merged independently, on background color only, so colored blocks stay solid across foreground changes. A multi-code-point cluster (ZWJ emoji, combining marks) always becomes a run of its own with a single `cols` entry, so a per-glyph `x` list can never tear it apart.
 
 ### `render(layoutRows, options): RenderModel`
 
@@ -239,16 +210,16 @@ interface RenderedRow {
 }
 
 interface RenderedRun {
-	class?: string;
-	fill?: string;
+	/** Inline CSS (fill, font-weight, …); absent for default-styled text. */
+	style?: string;
 	/** Space-separated x list, one per code point. */
 	x: string;
 	text: string;
 }
 
 interface RenderedBg {
-	class?: string;
-	fill?: string;
+	/** Inline CSS (the background fill). */
+	style: string;
 	x: string;
 	y: string;
 	width: string;
@@ -263,7 +234,7 @@ render(layout(parseAnsi('\x1b[1;31mred\x1b[0m ok')), { frame: true, margin: 1 })
 //   rows: [{
 //     y: '1.8',
 //     runs: [
-//       { class: 'ansi-bold ansi-fg-31', x: '0.6 1.2 1.8', text: 'red' },
+//       { style: 'fill: #cd3131; font-weight: bold', x: '0.6 1.2 1.8', text: 'red' },
 //       { x: '2.4 3 3.6', text: ' ok' }
 //     ],
 //     bgs: []
@@ -274,21 +245,7 @@ render(layout(parseAnsi('\x1b[1;31mred\x1b[0m ok')), { frame: true, margin: 1 })
 
 Cell height is 1 viewBox unit and cells are `cellAspect` units wide; the frame is `rows`×`cols` (or the content size), the viewBox is frame + margin, and overflowing content is meant to be clipped with `overflow="hidden"`.
 
-To consume the model, emit one `<rect>` per background, the grid `<path>` and frame `<rect>` if present, and one `<text y font-size xml:space="preserve">` per non-empty row containing one `<tspan class x>` per run (concrete `fill`s as inline style, so class rules can't override them). That is exactly what `exportSvg` does — and what the [`svelte-asciiart`](https://www.npmjs.com/package/svelte-asciiart) component template does with the same model, which is what keeps its live render and the exported file identical.
-
-### `themeCss(theme?, scope?): string`
-
-The CSS rules behind the `ansi-*` classes, resolved from a theme (default: `defaultTheme`):
-
-```css
-.ansi-bold { font-weight: bold }
-.ansi-fg-31 { fill: var(--ansi-fg-31, #cd3131) }
-.ansi-bg-43 { fill: var(--ansi-bg-43, #b58900) }
-.ansi-dim { fill: color-mix(in srgb, currentColor 55%, var(--ansi-default-bg, Canvas)) }
-...
-```
-
-`exportSvg` embeds this in the file's own `<style>`. If you inject the CSS into a shared document instead (a `<style>` inside an inline `<svg>` is document-scoped!), pass a `scope` selector — e.g. `themeCss(undefined, 'svg.my-art')` prefixes every rule so it can't restyle the rest of the page.
+To consume the model, emit one `<rect>` per background, the grid `<path>` and frame `<rect>` if present, and one `<text y font-size xml:space="preserve">` per non-empty row containing one `<tspan style x>` per run — all styling rides as inline `style`, so host CSS can't accidentally override it. That is exactly what `exportSvg` does — and what the [`svelte-asciiart`](https://www.npmjs.com/package/svelte-asciiart) component template does with the same model, which is what keeps its live render and the exported file identical.
 
 ### Width machinery
 

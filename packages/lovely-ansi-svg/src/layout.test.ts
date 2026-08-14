@@ -8,7 +8,7 @@ const lay = (text: string) => layout(parseAnsi(text));
 describe('layoutRow', () => {
 	it('merges plain text into a single run with per-cluster columns', () => {
 		expect(layoutRow({ text: 'abc', breaks: [] })).toEqual({
-			runs: [{ class: undefined, fill: undefined, cols: [0, 1, 2], text: 'abc' }],
+			runs: [{ cols: [0, 1, 2], text: 'abc' }],
 			bgs: [],
 			width: 3
 		});
@@ -17,8 +17,8 @@ describe('layoutRow', () => {
 	it('breaks runs on foreground style changes', () => {
 		const [row] = lay(`a${E}[31mb`);
 		expect(row.runs).toEqual([
-			{ class: undefined, fill: undefined, cols: [0], text: 'a' },
-			{ class: 'ansi-fg-31', fill: undefined, cols: [1], text: 'b' }
+			{ cols: [0], text: 'a' },
+			{ fill: '#cd3131', cols: [1], text: 'b' }
 		]);
 	});
 
@@ -40,34 +40,34 @@ describe('layoutRow', () => {
 		// joins it with 'e' and styles the cluster as its first code unit
 		const [row] = lay(`e${E}[31m\u0301x`);
 		expect(row.runs).toEqual([
-			{ class: undefined, fill: undefined, cols: [0], text: 'e\u0301' },
-			{ class: 'ansi-fg-31', fill: undefined, cols: [1], text: 'x' }
+			{ cols: [0], text: 'e\u0301' },
+			{ fill: '#cd3131', cols: [1], text: 'x' }
 		]);
 	});
 
 	it('drops zero-width clusters with no base', () => {
 		const [row] = lay('\u0301a');
-		expect(row.runs).toEqual([{ class: undefined, fill: undefined, cols: [0], text: 'a' }]);
+		expect(row.runs).toEqual([{ cols: [0], text: 'a' }]);
 		expect(row.width).toBe(1);
 	});
 
 	it('merges backgrounds independently of foreground changes', () => {
 		const [row] = lay(`${E}[41;31ma${E}[32mb${E}[0mc`);
-		expect(row.runs.map((r) => r.class)).toEqual(['ansi-fg-31', 'ansi-fg-32', undefined]);
-		expect(row.bgs).toEqual([{ class: 'ansi-bg-41', fill: undefined, start: 0, end: 2 }]);
+		expect(row.runs.map((r) => r.fill)).toEqual(['#cd3131', '#00a600', undefined]);
+		expect(row.bgs).toEqual([{ fill: '#cd3131', start: 0, end: 2 }]);
 	});
 
 	it('splits backgrounds when the bg style changes', () => {
 		const [row] = lay(`${E}[41ma${E}[42mb`);
 		expect(row.bgs).toEqual([
-			{ class: 'ansi-bg-41', fill: undefined, start: 0, end: 1 },
-			{ class: 'ansi-bg-42', fill: undefined, start: 1, end: 2 }
+			{ fill: '#cd3131', start: 0, end: 1 },
+			{ fill: '#00a600', start: 1, end: 2 }
 		]);
 	});
 
 	it('covers wide clusters with full-width backgrounds', () => {
 		const [row] = lay(`${E}[44m你`);
-		expect(row.bgs).toEqual([{ class: 'ansi-bg-44', fill: undefined, start: 0, end: 2 }]);
+		expect(row.bgs).toEqual([{ fill: '#0451a5', start: 0, end: 2 }]);
 	});
 });
 

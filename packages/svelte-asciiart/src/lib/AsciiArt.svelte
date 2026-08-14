@@ -1,21 +1,12 @@
-<script lang="ts" module>
+<script lang="ts">
 	import {
 		DEFAULT_FONT_STACK,
 		layout,
 		parseAnsi,
 		render,
-		themeCss,
-		type Margin
+		type Margin,
+		type Theme
 	} from 'lovely-ansi-svg';
-
-	// one source of truth for the ansi-* palette: the core theme, emitted as an
-	// inline <style> per instance (colors stay overridable via --ansi-* vars).
-	// The <style> is document-scoped, so the rules are scoped to our own svgs —
-	// bare .ansi-* rules would restyle the whole host page
-	const THEME_CSS = themeCss(undefined, 'svg.asciiart');
-</script>
-
-<script lang="ts">
 	import type { SVGAttributes } from 'svelte/elements';
 	import { measureCellMetrics } from './metrics.js';
 
@@ -38,6 +29,8 @@
 		glyphScale?: number;
 		/** Pixels per cell (height) for the intrinsic size. Default: 50. For a fixed on-screen scale pass style="width: auto; height: auto". */
 		cellSize?: number;
+		/** Color theme the ANSI escapes resolve through: 16-color palette + default fg/bg. */
+		theme?: Theme;
 	}
 
 	let {
@@ -50,6 +43,7 @@
 		cellAspect = 'auto',
 		glyphScale = 1,
 		cellSize = 50,
+		theme,
 		...rest
 	}: Props = $props();
 
@@ -76,9 +70,9 @@
 		return () => ro.disconnect();
 	});
 
-	// the segmentation pass depends only on the text; geometry-only prop
+	// the segmentation pass depends only on text and theme; geometry-only prop
 	// changes reuse it
-	const layoutRows = $derived(layout(parseAnsi(text)));
+	const layoutRows = $derived(layout(parseAnsi(text, theme)));
 	const model = $derived(
 		render(layoutRows, {
 			rows,
@@ -114,15 +108,10 @@
 	xmlns="http://www.w3.org/2000/svg"
 	{...rest}
 	{role}
-	class="asciiart{rest.class ? ` ${rest.class}` : ''}"
-	style="width: 100%; height: 100%; font-family: var(--ascii-font-family, {DEFAULT_FONT_STACK});{rest.style
-		? ` ${rest.style}`
-		: ''}"
+	style="width: 100%; height: 100%; font-family: var(--ascii-font-family, {DEFAULT_FONT_STACK});{theme?.foreground
+		? ` color: ${theme.foreground};`
+		: ''}{rest.style ? ` ${rest.style}` : ''}"
 >
-	<!-- Svelte reserves literal style tags for component CSS, so the theme
-	     block goes in via svelte:element -->
-	<svelte:element this={"style"}>{THEME_CSS}</svelte:element>
-
 	{#if cellAspect === 'auto'}
 		<!-- hidden font probe: its bounding box changes whenever the resolved
 		     font does, which is what triggers re-measurement -->
@@ -131,7 +120,7 @@
 
 	{#each model.rows as row}
 		{#each row.bgs as b}
-			<rect class={b.class} style:fill={b.fill} x={b.x} y={b.y} width={b.width} height={b.height} />
+			<rect style={b.style} x={b.x} y={b.y} width={b.width} height={b.height} />
 		{/each}
 	{/each}
 
@@ -163,7 +152,7 @@
 		{#if row.runs.length}
 			<text y={row.y} font-size={model.fontSize} fill="currentColor" xml:space="preserve">
 				{#each row.runs as run}
-					<tspan class={run.class} style:fill={run.fill} x={run.x}>{run.text}</tspan>
+					<tspan style={run.style} x={run.x}>{run.text}</tspan>
 				{/each}
 			</text>
 		{/if}

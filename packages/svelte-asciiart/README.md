@@ -25,22 +25,23 @@ npm install svelte-asciiart
 
 ## Props
 
-| Prop         | Type                                                             | Default  | Description                                                          |
-| ------------ | ---------------------------------------------------------------- | -------- | -------------------------------------------------------------------- |
-| `text`       | `string`                                                         | `''`     | The art to render; may contain ANSI SGR escapes                      |
-| `rows`       | `number`                                                         | auto     | Frame rows (content can overflow into the margin)                    |
-| `cols`       | `number`                                                         | auto     | Frame columns (content can overflow into the margin)                 |
-| `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`      | Margin around the frame in grid cells (top/right/bottom/left)        |
-| `grid`       | `boolean \| string`                                              | `false`  | Cell grid lines: `true` = default faint stroke, string = CSS class   |
-| `frame`      | `boolean \| string`                                              | `false`  | Border around the frame: `true` = default stroke, string = CSS class |
-| `cellAspect` | `number \| 'auto'`                                               | `'auto'` | Cell width/height ratio; `'auto'` measures the rendered font         |
-| `glyphScale` | `number`                                                         | `1`      | Glyph size as a fraction of the cell height                          |
-| `cellSize`   | `number`                                                         | `50`     | Pixels per cell for the intrinsic SVG size (exports, fixed scale)    |
-| `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -        | All other SVG attributes are forwarded to the `<svg>` element        |
+| Prop         | Type                                                             | Default     | Description                                                          |
+| ------------ | ---------------------------------------------------------------- | ----------- | -------------------------------------------------------------------- |
+| `text`       | `string`                                                         | `''`        | The art to render; may contain ANSI SGR escapes                      |
+| `rows`       | `number`                                                         | auto        | Frame rows (content can overflow into the margin)                    |
+| `cols`       | `number`                                                         | auto        | Frame columns (content can overflow into the margin)                 |
+| `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`         | Margin around the frame in grid cells (top/right/bottom/left)        |
+| `grid`       | `boolean \| string`                                              | `false`     | Cell grid lines: `true` = default faint stroke, string = CSS class   |
+| `frame`      | `boolean \| string`                                              | `false`     | Border around the frame: `true` = default stroke, string = CSS class |
+| `cellAspect` | `number \| 'auto'`                                               | `'auto'`    | Cell width/height ratio; `'auto'` measures the rendered font         |
+| `glyphScale` | `number`                                                         | `1`         | Glyph size as a fraction of the cell height                          |
+| `cellSize`   | `number`                                                         | `50`        | Pixels per cell for the intrinsic SVG size (exports, fixed scale)    |
+| `theme`      | `Theme`                                                          | VS Code-ish | Color theme ANSI escapes resolve through (palette + default fg/bg)   |
+| `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -           | All other SVG attributes are forwarded to the `<svg>` element        |
 
 The svg stretches to its container by default; for a fixed on-screen scale pass `style="width: auto; height: auto"` (the intrinsic size is `cellSize` px per cell).
 
-With `cellAspect: 'auto'` the component canvas-measures the active font after `document.fonts.ready` — glyph advance → aspect, bounding-box ascent → baseline — and re-measures when webfonts finish loading or the component's `style`/`class` change. The same measurement is exported as `measureCellMetrics(fontFamily)`; its result spreads straight into export options — `exportSvg(text, { ...measureCellMetrics(family), ... })` — to make exports match the live render (`exportSvg` cannot measure itself — no DOM).
+With `cellAspect: 'auto'` the component canvas-measures the active font — glyph advance → aspect, bounding-box ascent → baseline — and re-measures whenever the resolved font changes (an ancestor's `--ascii-font-family`, the component's `style`/`class`, webfont loads). The same measurement is exported as `measureCellMetrics(fontFamily)`; its result spreads straight into export options — `exportSvg(text, { ...measureCellMetrics(family), ... })` — to make exports match the live render (`exportSvg` cannot measure itself — no DOM).
 
 ## Grid Mode
 
@@ -62,26 +63,50 @@ With `cellAspect: 'auto'` the component canvas-measures the active font after `d
 
 ## Colors
 
-`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets. Style state persists across lines, unknown codes and non-SGR escapes are stripped. Blink emits an `ansi-blink` class with no default styling — style it from the host if you want it.
+`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets (blink is parsed but not rendered). Style state persists across lines, unknown codes and non-SGR escapes are stripped.
 
-Backgrounds paint as full-cell `<rect>`s behind the text, so adjacent runs and rows tile into solid blocks like a terminal. Inverse video swaps foreground and background; with no explicit foreground the glyphs paint in `--ansi-default-bg` (defaults to the `Canvas` system color) — set it to your page background.
+Backgrounds paint as full-cell `<rect>`s behind the text, so adjacent runs and rows tile into solid blocks like a terminal. Inverse video swaps foreground and background; with no explicit foreground the glyphs paint in the theme background (default: the `Canvas` system color).
 
-The 16 base colors render as CSS classes (`ansi-fg-31`, `ansi-bg-41`, `ansi-bold`, `ansi-dim`, …) backed by custom properties, so the host page can theme them:
+Note that `theme.background` paints nothing — the component is transparent and the host page supplies the actual backdrop. It's the _assumption_ the color math runs on: what inverse glyphs fill with and what dim fades toward. If your page behind the component isn't `Canvas`-colored, set `theme.background` to match it or dim/inverse will mix toward the wrong color.
 
-```css
-.my-terminal {
-	--ansi-fg-31: #ff5f56; /* red */
-	--ansi-fg-36: #4cd4e0; /* cyan */
-	--ansi-bg-41: #8b1a10; /* red background */
-	--ansi-default-bg: #1e1e1e;
-}
+The 16 base colors resolve through the `theme` prop (VS Code-ish default) as inline styles; changing the theme re-renders:
+
+```svelte
+<script>
+	import { AsciiArt } from 'svelte-asciiart';
+	import { defaultTheme } from 'lovely-ansi-svg';
+
+	const theme = { ...defaultTheme, foreground: '#d4d4d4', background: '#1e1e1e' };
+</script>
+
+<AsciiArt {text} {theme} />
 ```
 
-256-color and truecolor values are applied as inline `fill` styles. The font comes from the `--ascii-font-family` CSS variable, falling back to a generic monospace stack.
+256-color and truecolor values are spec-fixed and render as-is.
 
 Character widths are display-based: CJK and emoji occupy two cells and stay aligned with box-drawing art.
 
 Pass `aria-label` to describe the art — the svg then has `role="img"`; without a label it renders as `role="presentation"` (decorative).
+
+## Font
+
+The font comes from the `--ascii-font-family` CSS variable, falling back to a generic monospace stack. Set it on the component itself or any ancestor:
+
+```svelte
+<div class="terminal">
+	<AsciiArt {text} />
+</div>
+
+<style>
+	.terminal {
+		--ascii-font-family: 'JetBrains Mono', ui-monospace, monospace;
+	}
+</style>
+```
+
+or inline: `<AsciiArt {text} style="--ascii-font-family: Menlo, monospace" />`.
+
+Webfonts load however the page loads them (a `<link>` to Google Fonts, `@font-face` rules); with the default `cellAspect: 'auto'` the grid re-measures itself when the font arrives or the variable changes, so no coordination is needed. Non-monospace fonts won't break the grid — glyphs are pinned to cells by per-character `x` positions — they just look off.
 
 ## Exporting
 

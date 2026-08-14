@@ -76,10 +76,12 @@ describe('AsciiArt', () => {
 		expect(container.querySelector('svg')).toBeTruthy();
 	});
 
-	it('embeds the ansi theme as an inline style block', async () => {
-		const { container } = await render(AsciiArt, { text: 'x' });
-		const style = container.querySelector('svg style');
-		expect(style?.textContent).toContain('.ansi-fg-31 { fill: var(--ansi-fg-31, #cd3131) }');
+	it('resolves ANSI colors through a custom theme prop', async () => {
+		const palette: string[] = Array(16).fill('#000000');
+		palette[1] = '#123456';
+		const theme = { palette };
+		const { container } = await render(AsciiArt, { text: '\x1b[31mx', theme });
+		expect(container.querySelector('tspan')!.style.fill).toBe('rgb(18, 52, 86)');
 	});
 
 	it('grid: true draws a default-stroked grid path', async () => {
@@ -124,12 +126,13 @@ describe('AsciiArt', () => {
 		expect(tspans[0].getAttribute('x')).toBe('0 0.6 1.2');
 	});
 
-	it('parses ANSI escapes in text into classed runs', async () => {
+	it('parses ANSI escapes in text into styled runs', async () => {
 		const { container } = await render(AsciiArt, { text: 'a \x1b[1;36mcyan\x1b[0m b', ...A });
 		const tspans = Array.from(container.querySelectorAll('tspan'));
 		expect(tspans.map((t) => t.textContent)).toEqual(['a ', 'cyan', ' b']);
-		expect(tspans[1].getAttribute('class')).toContain('ansi-bold');
-		expect(tspans[1].getAttribute('class')).toContain('ansi-fg-36');
+		expect(tspans[1].style.fontWeight).toBe('bold');
+		// default-theme cyan
+		expect(tspans[1].style.fill).toBe('rgb(5, 152, 188)');
 		// escapes are zero-width for layout: 8 columns
 		expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 4.8 1');
 	});
@@ -158,7 +161,8 @@ describe('AsciiArt', () => {
 	it('renders background runs as full-cell rects behind the text', async () => {
 		const { container } = await render(AsciiArt, { text: 'a\x1b[41;32mXY\x1b[0mb', ...A });
 		const rect = container.querySelector('rect')!;
-		expect(rect.getAttribute('class')).toBe('ansi-bg-41');
+		// default-theme red background
+		expect(rect.style.fill).toBe('rgb(205, 49, 49)');
 		// starts at col 1, spans 2 cols, full cell height
 		expect(rect.getAttribute('x')).toBe('0.6');
 		expect(rect.getAttribute('width')).toBe('1.2');
