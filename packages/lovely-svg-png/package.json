@@ -1,6 +1,6 @@
 {
 	"name": "lovely-svg-png",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Rasterize SVG strings to PNG in the browser, with webfonts embedded as data: URIs (@import chains included)",
 	"license": "MIT",
 	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
