@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Custom-drawn box-drawing and block glyphs (U+2500–U+259F): drawn as exact-cell rects/paths instead of font glyphs, so lines and blocks tile seamlessly at any font and cell aspect. On by default; pass `customGlyphs: false` to keep font rendering. The render model carries them as per-row `shapes` (`RenderedShape`).
+
 ## [0.1.0] - 2026-08-15
 
 ### Added

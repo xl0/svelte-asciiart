@@ -44,25 +44,28 @@ const svg = exportSvg(text, {
 
 ### Options
 
-| Option       | Type                            | Default     | Description                                                             |
-| ------------ | ------------------------------- | ----------- | ----------------------------------------------------------------------- |
-| `rows`       | `number`                        | auto        | Frame height in cells (content may overflow, clipped at the viewBox)    |
-| `cols`       | `number`                        | auto        | Frame width in cells (display columns)                                  |
-| `margin`     | `number \| [v, h] \| [t,r,b,l]` | `0`         | Margin around the frame, in cells                                       |
-| `grid`       | `boolean \| string`             | `false`     | Cell grid lines: `true` = default faint stroke, string = CSS class      |
-| `frame`      | `boolean \| string`             | `false`     | Border around the frame: `true` = default stroke, string = CSS class    |
-| `cellAspect` | `number`                        | `0.6`       | Cell width:height ratio (typical monospace)                             |
-| `baseline`   | `number`                        | `0.8`       | Baseline position within the cell, 0–1 from the top                     |
-| `glyphScale` | `number`                        | `1`         | Glyph size as a fraction of cell height (1 = box-drawing tiles)         |
-| `cellSize`   | `number`                        | `50`        | Pixels per cell for the intrinsic `width`/`height` attributes           |
-| `fontFamily` | `string`                        | mono stack  | `font-family` for the text (named, not embedded)                        |
-| `theme`      | `Theme`                         | VS Code-ish | 16-color palette + default fg/bg the ANSI colors resolve through        |
-| `background` | `string`                        | —           | Solid background rect; doubles as `theme.background` unless that is set |
-| `extraCss`   | `string`                        | —           | CSS emitted in a `<style>` block (`@font-face`, grid/frame classes…)    |
+| Option         | Type                            | Default     | Description                                                                |
+| -------------- | ------------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `rows`         | `number`                        | auto        | Frame height in cells (content may overflow, clipped at the viewBox)       |
+| `cols`         | `number`                        | auto        | Frame width in cells (display columns)                                     |
+| `margin`       | `number \| [v, h] \| [t,r,b,l]` | `0`         | Margin around the frame, in cells                                          |
+| `grid`         | `boolean \| string`             | `false`     | Cell grid lines: `true` = default faint stroke, string = CSS class         |
+| `frame`        | `boolean \| string`             | `false`     | Border around the frame: `true` = default stroke, string = CSS class       |
+| `cellAspect`   | `number`                        | `0.6`       | Cell width:height ratio (typical monospace)                                |
+| `baseline`     | `number`                        | `0.8`       | Baseline position within the cell, 0–1 from the top                        |
+| `glyphScale`   | `number`                        | `1`         | Glyph size as a fraction of cell height (1 = box-drawing tiles)            |
+| `cellSize`     | `number`                        | `50`        | Pixels per cell for the intrinsic `width`/`height` attributes              |
+| `customGlyphs` | `boolean`                       | `true`      | Draw box/block chars (U+2500–U+259F) as exact-cell shapes, not font glyphs |
+| `fontFamily`   | `string`                        | mono stack  | `font-family` for the text (named, not embedded)                           |
+| `theme`        | `Theme`                         | VS Code-ish | 16-color palette + default fg/bg the ANSI colors resolve through           |
+| `background`   | `string`                        | —           | Solid background rect; doubles as `theme.background` unless that is set    |
+| `extraCss`     | `string`                        | —           | CSS emitted in a `<style>` block (`@font-face`, grid/frame classes…)       |
 
 ### ANSI support
 
 16-color, 256-color (`38;5;n`) and truecolor (`38;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; per-attribute resets (blink is parsed but not rendered). Style state persists across lines. Unknown codes are consumed; non-SGR escapes (cursor movement, OSC hyperlinks, DCS/sixel payloads — even spanning newlines) are stripped. Tabs expand to 8-column stops. CJK and emoji occupy two cells; grapheme clusters (ZWJ emoji, combining marks) are never torn apart, even by escapes.
+
+Box-drawing and block characters (U+2500–U+259F — lines, corners, doubles, dashes, arcs, diagonals, blocks, shades, quadrants) are drawn as exact-cell rects/paths instead of font glyphs, so they tile seamlessly at any font and cell aspect — font-rendered box characters overshoot or underfill the cell depending on the font. Drawn glyphs always fill the whole cell, ignoring `glyphScale`. Pass `customGlyphs: false` to render them as text.
 
 ### Theming
 
@@ -207,6 +210,14 @@ interface RenderedRow {
 	y: string;
 	runs: RenderedRun[];
 	bgs: RenderedBg[];
+	/** Custom-drawn box/block glyphs, one path per style. */
+	shapes: RenderedShape[];
+}
+
+interface RenderedShape {
+	d: string;
+	/** Inline CSS: fill or stroke, always explicit. */
+	style: string;
 }
 
 interface RenderedRun {
@@ -245,7 +256,7 @@ render(layout(parseAnsi('\x1b[1;31mred\x1b[0m ok')), { frame: true, margin: 1 })
 
 Cell height is 1 viewBox unit and cells are `cellAspect` units wide; the frame is `rows`×`cols` (or the content size), the viewBox is frame + margin, and overflowing content is meant to be clipped with `overflow="hidden"`.
 
-To consume the model, emit one `<rect>` per background, the grid `<path>` and frame `<rect>` if present, and one `<text y font-size xml:space="preserve">` per non-empty row containing one `<tspan style x>` per run — all styling rides as inline `style`, so host CSS can't accidentally override it. That is exactly what `exportSvg` does — and what the [`svelte-asciiart`](https://www.npmjs.com/package/svelte-asciiart) component template does with the same model, which is what keeps its live render and the exported file identical.
+To consume the model, emit one `<rect>` per background, the grid `<path>` and frame `<rect>` if present, one `<path style d>` per shape, and one `<text y font-size xml:space="preserve">` per non-empty row containing one `<tspan style x>` per run — all styling rides as inline `style`, so host CSS can't accidentally override it. That is exactly what `exportSvg` does — and what the [`svelte-asciiart`](https://www.npmjs.com/package/svelte-asciiart) component template does with the same model, which is what keeps its live render and the exported file identical.
 
 ### Width machinery
 
