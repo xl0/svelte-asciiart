@@ -86,6 +86,9 @@ export function layoutRow(row: ParsedRow): LayoutRow {
 		if (bgCur && bgCur.fill !== style.bgFill) bgFlush();
 		if (style.bgFill !== undefined && !bgCur) bgCur = { fill: style.bgFill, start: col };
 		if ([...cl].length > 1) {
+			// multi-code-point clusters render as text even when the base is a
+			// custom-drawable char (e.g. box char + combining mark): drawing the
+			// shape would silently drop the mark, the font renders both
 			flush();
 			runs.push({ ...fgOf(style), cols: [col], text: cl });
 		} else {

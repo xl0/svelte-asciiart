@@ -85,8 +85,9 @@
 		const timeout = setTimeout(() => (debouncedText = t), 150);
 		return () => clearTimeout(timeout);
 	});
-	// \x1b, \e and \033 all read as ESC in the pipeline input
-	const rawText = $derived(debouncedText.replace(/\\x1b|\\e|\\033/g, '\x1b'));
+	// \x1b and \033 read as ESC in the pipeline input (no \e — it would eat
+	// ordinary backslash text like C:\example)
+	const rawText = $derived(debouncedText.replace(/\\x1b|\\033/g, '\x1b'));
 
 	const fontFamily = $derived(monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family);
 
@@ -174,10 +175,8 @@
 				<p class="text-xs text-muted-foreground">
 					Escapes are written as <code class="font-mono">\x1b</code>
 					(
-					<code class="font-mono">\e</code>
-					and
 					<code class="font-mono">\033</code>
-					work too); pasted raw ESC bytes are converted.
+					works too); pasted raw ESC bytes are converted.
 				</p>
 
 				<div class="flex flex-wrap items-end gap-4">
