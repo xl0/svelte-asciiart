@@ -166,6 +166,9 @@ await $`git push origin ${`v${version}`}`;
 console.log(`\n=== waiting for CI to stage ${version} on npm ===\n`);
 // CI runs in under a minute; ten is a hung workflow, not a slow one.
 const deadline = Date.now() + 10 * 60 * 1000;
+// one TOTP code is normally valid long enough to approve every package —
+// re-prompt only when it expires or is rejected (rare)
+let otp: string | undefined;
 for (const { name } of pkgs) {
 	let stageId: string | undefined;
 	while (!stageId) {
@@ -182,9 +185,10 @@ for (const { name } of pkgs) {
 	console.log(`${name} staged as ${stageId}`);
 
 	for (let attempt = 1; ; attempt++) {
-		const otp = prompt(`2FA code to approve and publish ${name}:`)?.trim();
+		otp ??= prompt(`2FA code to approve and publish ${name}:`)?.trim() || undefined;
 		if (!otp) die(`no code entered; approve manually with: npm stage approve ${stageId}`);
 		if ((await $`npm stage approve ${stageId} --otp ${otp}`.nothrow()).exitCode === 0) break;
+		otp = undefined;
 		if (attempt === 3) die(`approve manually with: npm stage approve ${stageId}`);
 	}
 }
