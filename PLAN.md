@@ -55,9 +55,9 @@ via GitHub search), so the breaking window is free.
 
 ## Next
 
-- [ ] Release 0.1.0: `/cl` audit, then `bun run release minor` (user runs it
+- [x] Release 0.1.0: `/cl` audit, then `bun run release minor` (user runs it
       — the 2FA prompt needs a TTY).
-- [ ] Point lovely-mermaid at `lovely-ansi-svg` (separate repo/session) —
+- [x] Point lovely-mermaid at `lovely-ansi-svg` (separate repo/session) —
       their `scripts/gen-demo-svg.ts` collapses to `toAnsi()` + `exportSvg()`.
 - [x] Custom-drawn box/block glyphs (xterm `customGlyphs` approach):
       U+2500–U+259F drawn as exact-cell rects/paths (`src/glyphs.ts`),
