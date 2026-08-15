@@ -87,7 +87,7 @@
 		<p class="text-sm text-muted-foreground">
 			Rasterize any SVG string to PNG in the browser, with webfonts fetched and embedded as
 			<code class="font-mono">data:</code>
-			 URIs. Not tied to ANSI art or any framework.
+			URIs. Not tied to ANSI art or any framework.
 		</p>
 	</div>
 
@@ -101,7 +101,7 @@
 				<Textarea id="svg-source" bind:value={svgSource} rows={12} class="font-mono text-xs" />
 				<p class="text-xs text-muted-foreground">
 					The sample comes from <code class="font-mono">exportSvg</code>
-					 (lovely-ansi-svg), but any SVG string works — paste your own.
+					(lovely-ansi-svg), but any SVG string works — paste your own.
 				</p>
 
 				<div class="flex flex-wrap items-end gap-6">
@@ -174,7 +174,7 @@
 				{/if}
 				<p class="text-xs text-muted-foreground">
 					The PNG is rendered off-screen: SVG string → blob URL → <code class="font-mono">Image</code>
-					 → canvas. Toggle font embedding off and the rasterizer falls back to whatever font the browser substitutes.
+					→ canvas. Toggle font embedding off and the rasterizer falls back to whatever font the browser substitutes.
 				</p>
 			</Card.Content>
 		</Card.Root>

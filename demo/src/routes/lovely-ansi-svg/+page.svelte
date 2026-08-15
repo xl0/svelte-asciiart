@@ -41,6 +41,10 @@
 			text: [`${E}[43;30m warn ${E}[0m ${E}[41;97m error ${E}[0m`, `${E}[7m inverse ${E}[0m ${E}[2;7m dim inverse ${E}[0m`].join('\n')
 		},
 		{ label: 'Wide chars & clusters', text: '日本語 👍 👨‍👩‍👧 é\n|吾輩は猫である|' },
+		{
+			label: 'Custom-drawn box glyphs',
+			text: ['┏━┳━┓╔═╦═╗╭─┬─╮', '┃ ┣━┫╠═╬═╣├─┼─┤', '┗━┻━┛╚═╩═╝╰─┴─╯', '▁▂▃▄▅▆▇█ ░▒▓ ▖▚▜'].join('\n')
+		},
 		{ label: 'Tabs (8-column stops)', text: 'name\tqty\nspam\t42\neggs\t7' },
 		{
 			label: 'Dim vs backdrop',
@@ -48,12 +52,12 @@
 		}
 	];
 
-	// show each sample's escape string the way you would type it in JS
-	const jsLiteral = (s: string) =>
-		"'" + s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\x1b/g, '\\x1b').replace(/\n/g, "\\n' +\n'").replace(/\t/g, '\\t') + "'";
+	// escapes in printable form, same as the playground textarea — a gallery
+	// sample pastes straight into it
+	const showEsc = (s: string) => s.replaceAll('\x1b', '\\x1b');
 
 	const gallery = samples.map((s) => {
-		const lit = jsLiteral(s.text);
+		const lit = showEsc(s.text);
 		return {
 			...s,
 			svg: exportSvg(s.text, { background: '#f8f8f8', margin: [0.5, 1], cellSize: 20 }),
@@ -62,33 +66,41 @@
 	});
 
 	// ---- pipeline playground ----
-	let text = $state(ansiArt);
+	// the textarea holds escapes in printable form (\x1b) so they render and
+	// can be edited; raw ESC bytes (e.g. pasted from a terminal) are converted
+	let text = $state(showEsc(ansiArt));
 	let frame = $state(false);
 	let bgOn = $state(true);
 	let bgColor = $state('#1e1e1e');
 	let fgColor = $state('#d4d4d4');
 	let fontKey = $state(defaultFontKey);
 
-	let debouncedText = $state(ansiArt);
+	$effect(() => {
+		if (text.includes('\x1b')) text = showEsc(text);
+	});
+
+	let debouncedText = $state(showEsc(ansiArt));
 	$effect(() => {
 		const t = text;
 		const timeout = setTimeout(() => (debouncedText = t), 150);
 		return () => clearTimeout(timeout);
 	});
+	// \x1b, \e and \033 all read as ESC in the pipeline input
+	const rawText = $derived(debouncedText.replace(/\\x1b|\\e|\\033/g, '\x1b'));
 
 	const fontFamily = $derived(monoFonts.find((f) => f.key === fontKey)?.family ?? monoFonts[0].family);
 
 	// with a painted background the inline-embedded svg must not inherit the
 	// page's text color — set the default foreground explicitly
 	const svgString = $derived(
-		exportSvg(debouncedText, {
+		exportSvg(rawText, {
 			margin: 1,
 			frame,
 			fontFamily,
 			...(bgOn ? { background: bgColor, theme: { ...defaultTheme, foreground: fgColor } } : {})
 		})
 	);
-	const parsed = $derived(parseAnsi(debouncedText));
+	const parsed = $derived(parseAnsi(rawText));
 	const laid = $derived(layout(parsed));
 	const model = $derived(render(laid, { margin: 1, frame }));
 
@@ -155,10 +167,18 @@
 					<code class="font-mono">render</code>
 					→
 					<code class="font-mono">exportSvg</code>
-					 — inspect every stage.
+					— inspect every stage.
 				</p>
 
 				<Textarea bind:value={text} rows={6} class="overflow-x-scroll font-mono text-sm whitespace-nowrap" />
+				<p class="text-xs text-muted-foreground">
+					Escapes are written as <code class="font-mono">\x1b</code>
+					(
+					<code class="font-mono">\e</code>
+					and
+					<code class="font-mono">\033</code>
+					work too); pasted raw ESC bytes are converted.
+				</p>
 
 				<div class="flex flex-wrap items-end gap-4">
 					<div class="flex min-w-fit items-center gap-2 pb-2">
