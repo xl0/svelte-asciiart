@@ -135,6 +135,13 @@ describe('exportSvg', () => {
 		expect(svg).toContain('fill="currentColor"');
 	});
 
+	it('wraps linked runs in an SVG anchor', () => {
+		const svg = exportSvg(`${E}]8;;https://ex.com${E}\\hi${E}]8;;${E}\\ there`);
+		expect(svg).toContain('<a href="https://ex.com"><tspan');
+		expect(svg).toContain('</tspan></a>');
+		expect(svg.match(/<a /g)).toHaveLength(1);
+	});
+
 	it('preserves whitespace on every text element', () => {
 		// rasterizers don't reliably inherit xml:space from the root; collapsed
 		// space runs would mis-slot the per-char x list

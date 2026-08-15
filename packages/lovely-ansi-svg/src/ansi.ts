@@ -11,6 +11,7 @@ import { displayWidth } from './width.js';
  *   backdrop.
  * - `bgFill`: background color, painted as a full-cell rect behind the text.
  * - The flags map to font styling; `blink` is parsed but not rendered.
+ * - `link`: OSC 8 hyperlink target (http/https/ftp/mailto only).
  */
 export interface Style {
 	fill?: string;
@@ -20,6 +21,7 @@ export interface Style {
 	underline?: boolean;
 	strike?: boolean;
 	blink?: boolean;
+	link?: string;
 }
 
 /** A style change: `style` applies from code-unit `offset` to the next break (or end of row). */
@@ -175,15 +177,21 @@ const sameStyle = (a: Style, b: Style) =>
 	a.italic === b.italic &&
 	a.underline === b.underline &&
 	a.strike === b.strike &&
-	a.blink === b.blink;
+	a.blink === b.blink &&
+	a.link === b.link;
 
 // SGR (group 1 captures params; ':' admits ITU T.416 colon subparams, which
-// applySgr then skips as unknown), other CSI sequences (params + intermediates
+// applySgr then skips as unknown), OSC 8 hyperlinks (group 2 the params
+// field, group 3 the URI; an unterminated one falls through to the generic
+// string branch and is stripped), other CSI sequences (params + intermediates
 // + final), string sequences — OSC, DCS, APC, PM, SOS — with their payload up
-// to BEL or ST (e.g. OSC-8 hyperlinks, title sets, sixel), or ESC +
-// intermediates + final.
+// to BEL or ST (title sets, sixel), or ESC + intermediates + final.
 const ESCAPE_RE =
-	/\x1b\[([0-9;:]*)m|\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b[\x20-\x2f]*[\x30-\x7e]?/g;
+	/\x1b\[([0-9;:]*)m|\x1b\]8;([^;\x07\x1b]*);([^\x07\x1b]*)(?:\x07|\x1b\\)|\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b[\x20-\x2f]*[\x30-\x7e]?/g;
+
+// hyperlink schemes that survive into the output — anything else (javascript:,
+// data:, …) is dropped rather than emitted into an <a href>
+const SAFE_LINK_RE = /^(https?|ftp|mailto):/i;
 
 // C0 controls (and DEL) that can appear inside a line: TAB is expanded to the
 // next 8-column stop, the rest (bare \r, BEL, backspace, …) are dropped — they
@@ -195,8 +203,9 @@ const C0_RE = /[\x00-\x09\x0b-\x1f\x7f]/;
  * with style breakpoints, with colors resolved through `theme`. Style state
  * persists across lines until reset. Supported: 16-color, 256-color and
  * truecolor foregrounds and backgrounds; bold, dim, italic, underline, blink,
- * strikethrough; inverse (resolved as a fg/bg swap); resets. Unknown codes
- * are consumed without effect; non-SGR escapes are stripped. Tabs are
+ * strikethrough; inverse (resolved as a fg/bg swap); resets; OSC 8 hyperlinks
+ * (web-safe schemes only, closed by an empty URI). Unknown codes
+ * are consumed without effect; other non-SGR escapes are stripped. Tabs are
  * expanded to 8-column stops; other C0 controls are dropped. On plain text
  * this degenerates to one break-free row per line.
  *
@@ -254,12 +263,22 @@ export function parseAnsi(text: string, theme: Theme = defaultTheme): ParsedRow[
 		}
 	};
 	let pos = 0;
+	// active OSC 8 hyperlink; orthogonal to SGR state — a color reset does not
+	// close a link, only `]8;;` (empty URI) does
+	let link: string | undefined;
+	const restyle = () => {
+		curStyle = styleOf(state, theme);
+		if (link !== undefined) curStyle.link = link;
+	};
 	for (const m of text.matchAll(ESCAPE_RE)) {
 		plain(text.slice(pos, m.index));
 		pos = m.index + m[0].length;
 		if (m[1] !== undefined) {
 			applySgr(state, m[1].split(';').map(Number));
-			curStyle = styleOf(state, theme);
+			restyle();
+		} else if (m[3] !== undefined) {
+			link = SAFE_LINK_RE.test(m[3]) ? m[3] : undefined;
+			restyle();
 		}
 	}
 	plain(text.slice(pos));

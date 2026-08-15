@@ -64,7 +64,7 @@ With `cellAspect: 'auto'` the component canvas-measures the active font — glyp
 
 ## Colors
 
-`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets (blink is parsed but not rendered). Style state persists across lines, unknown codes and non-SGR escapes are stripped.
+`text` containing ANSI SGR escapes is parsed automatically — supported: 16-color, 256-color (`38;5;n`/`48;5;n`) and truecolor (`38;2;r;g;b`/`48;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; resets (blink is parsed but not rendered). OSC 8 hyperlinks render as clickable anchors (web-safe schemes only). Style state persists across lines, unknown codes and other non-SGR escapes are stripped.
 
 Backgrounds paint as full-cell `<rect>`s behind the text, so adjacent runs and rows tile into solid blocks like a terminal. Inverse video swaps foreground and background; with no explicit foreground the glyphs paint in the theme background (default: the `Canvas` system color).
 

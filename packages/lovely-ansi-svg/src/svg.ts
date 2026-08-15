@@ -33,6 +33,8 @@ export interface RenderOptions {
 export interface RenderedRun {
 	/** Inline CSS (fill, font-weight, …); absent for default-styled text. */
 	style?: string;
+	/** OSC 8 hyperlink target — wrap the tspan in an `<a href>`. */
+	href?: string;
 	/** space-separated x list, one per code point */
 	x: string;
 	text: string;
@@ -143,7 +145,7 @@ export function render(layoutRows: LayoutRow[], options: RenderOptions = {}): Re
 							: `fill: ${color}${g.opacity !== undefined ? `; fill-opacity: ${fmt(g.opacity)}` : ''}`;
 					shapeAcc.set(style, (shapeAcc.get(style) ?? '') + g.d);
 				}
-			} else runs.push({ style: runStyle(run), x: run.cols.map(cellX).join(' '), text: run.text });
+			} else runs.push({ style: runStyle(run), href: run.link, x: run.cols.map(cellX).join(' '), text: run.text });
 		}
 		return {
 			y: fmt(offsetY + r + baselineY),
@@ -267,7 +269,12 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 
 	for (const row of model.rows) {
 		if (!row.runs.length) continue;
-		const tspans = row.runs.map((run) => `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`).join('');
+		const tspans = row.runs
+			.map((run) => {
+				const t = `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`;
+				return run.href ? `<a href="${escAttr(run.href)}">${t}</a>` : t;
+			})
+			.join('');
 		// xml:space on each <text>: rasterizers don't reliably inherit it from
 		// the root, and collapsed space runs would mis-slot the per-char x list
 		out.push(`<text y="${row.y}" font-size="${model.fontSize}" fill="currentColor" xml:space="preserve">${tspans}</text>`);

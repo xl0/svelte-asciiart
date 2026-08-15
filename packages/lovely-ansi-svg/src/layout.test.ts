@@ -51,6 +51,12 @@ describe('layoutRow', () => {
 		expect(row.width).toBe(1);
 	});
 
+	it('keeps linked box-drawing chars as text so they stay clickable', () => {
+		const [row] = lay(`${E}]8;;https://ex.com${E}\\─${E}]8;;${E}\\x`);
+		expect(row.runs[0]).toEqual({ link: 'https://ex.com', cols: [0], text: '─' });
+		expect(row.runs[0].custom).toBeUndefined();
+	});
+
 	it('merges backgrounds independently of foreground changes', () => {
 		const [row] = lay(`${E}[41;31ma${E}[32mb${E}[0mc`);
 		expect(row.runs.map((r) => r.fill)).toEqual(['#cd3131', '#00a600', undefined]);

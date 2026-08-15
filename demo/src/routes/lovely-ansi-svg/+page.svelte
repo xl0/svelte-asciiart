@@ -47,6 +47,10 @@
 		},
 		{ label: 'Tabs (8-column stops)', text: 'name\tqty\nspam\t42\neggs\t7' },
 		{
+			label: 'Hyperlinks (OSC 8)',
+			text: `docs: ${E}]8;;https://github.com/xl0/svelte-asciiart${E}\\${E}[94;4msvelte-asciiart${E}[0m${E}]8;;${E}\\`
+		},
+		{
 			label: 'Dim vs backdrop',
 			text: [`${E}[31mnormal red${E}[0m`, `${E}[2;31mdim red${E}[0m`, `${E}[2;31;44mdim on blue${E}[0m`].join('\n')
 		}

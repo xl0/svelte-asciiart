@@ -195,6 +195,16 @@ describe('AsciiArt', () => {
 		expect(off.container.querySelector('tspan')!.textContent).toBe('┌─┐');
 	});
 
+	it('wraps OSC 8 linked runs in an anchor', async () => {
+		const { container } = await render(AsciiArt, {
+			text: '\x1b]8;;https://example.com/\x07hi\x1b]8;;\x07 x',
+			...A
+		});
+		const a = container.querySelector('a')!;
+		expect(a.getAttribute('href')).toBe('https://example.com/');
+		expect(a.querySelector('tspan')!.textContent).toBe('hi');
+	});
+
 	it('renders without a text prop', async () => {
 		const { container } = await render(AsciiArt, {});
 		expect(container.querySelector('svg')).toBeTruthy();
