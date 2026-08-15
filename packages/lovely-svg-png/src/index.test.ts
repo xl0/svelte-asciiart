@@ -60,6 +60,19 @@ describe('svgStringToPng', () => {
 		expect(Array.from(ctx.getImageData(25, 25, 1, 1).data)).toEqual([0, 128, 0, 255]);
 	});
 
+	it('injects fontCss correctly when a root attribute contains ">"', async () => {
+		const svg =
+			'<svg xmlns="http://www.w3.org/2000/svg" aria-label="a > b" viewBox="0 0 1 1" width="50" height="50">' +
+			'<rect class="p" width="1" height="1"/></svg>';
+		const img = await loadImage(await svgStringToPng(svg, { fontCss: '.p { fill: rgb(0, 128, 0) }' }));
+		const canvas = document.createElement('canvas');
+		canvas.width = 50;
+		canvas.height = 50;
+		const ctx = canvas.getContext('2d')!;
+		ctx.drawImage(img, 0, 0);
+		expect(Array.from(ctx.getImageData(25, 25, 1, 1).data)).toEqual([0, 128, 0, 255]);
+	});
+
 	it('rejects on an unloadable SVG string', async () => {
 		await expect(svgStringToPng('not an svg at all')).rejects.toThrow('Failed to load SVG into image');
 	});

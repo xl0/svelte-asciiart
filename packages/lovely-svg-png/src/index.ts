@@ -142,7 +142,8 @@ export async function svgStringToPng(svgString: string, options: SvgStringToPngO
 
 	if (fontCss) {
 		const style = `<defs><style>${fontCss.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</style></defs>`;
-		const injected = svgString.replace(/<svg[^>]*>/, (m) => m + style);
+		// quote-aware root-tag match: '>' is legal inside quoted attribute values
+		const injected = svgString.replace(/<svg(?:[^>"']|"[^"]*"|'[^']*')*>/, (m) => m + style);
 		if (injected === svgString) throw new Error('fontCss set but no <svg> root tag found');
 		svgString = injected;
 	}
