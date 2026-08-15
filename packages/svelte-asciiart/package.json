@@ -1,6 +1,6 @@
 {
 	"name": "svelte-asciiart",
-	"version": "0.0.6",
+	"version": "0.1.0",
 	"description": "Render ASCII/ANSI art as a crisp, styleable SVG character grid in Svelte 5 (thin wrapper around lovely-ansi-svg)",
 	"license": "MIT",
 	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
@@ -38,7 +38,7 @@
 		"svelte": "^5.0.0"
 	},
 	"dependencies": {
-		"lovely-ansi-svg": "^0.0.6"
+		"lovely-ansi-svg": "^0.1.0"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",

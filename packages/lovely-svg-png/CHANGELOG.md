@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-15
+
 ### Added
 
 - Initial release: browser-side SVG-string → PNG rasterization, extracted from `svelte-asciiart`.

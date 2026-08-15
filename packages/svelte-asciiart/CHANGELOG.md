@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-15
+
 ### Breaking Changes
 
 - The rendering core moved to the new framework-agnostic `lovely-ansi-svg` package; `svelte-asciiart` now exports only the `AsciiArt` component.

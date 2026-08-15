@@ -1,6 +1,6 @@
 {
 	"name": "lovely-ansi-svg",
-	"version": "0.0.6",
+	"version": "0.1.0",
 	"description": "Convert ANSI/ASCII terminal text into a crisp, styleable SVG character grid. Framework-agnostic, no DOM needed.",
 	"license": "MIT",
 	"author": "Alexey Zaytsev <alexey.zaytsev@gmail.com>",
