@@ -54,7 +54,7 @@
     },
     "packages/lovely-ansi-svg": {
       "name": "lovely-ansi-svg",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "publint": "^0.3.23",
         "typescript": "^5.9",
@@ -63,7 +63,7 @@
     },
     "packages/lovely-svg-png": {
       "name": "lovely-svg-png",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "@vitest/browser-playwright": "^4.1.10",
         "playwright": "^1.62.1",
@@ -75,9 +75,9 @@
     },
     "packages/svelte-asciiart": {
       "name": "svelte-asciiart",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
-        "lovely-ansi-svg": "^0.1.0",
+        "lovely-ansi-svg": "^0.1.1",
       },
       "devDependencies": {
         "@sveltejs/adapter-auto": "^7.0.1",

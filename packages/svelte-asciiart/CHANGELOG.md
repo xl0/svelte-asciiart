@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-15
+
 ### Added
 
 - `customGlyphs` prop (default `true`): box-drawing and block characters (U+2500–U+259F) render as exact-cell shapes instead of font glyphs, so they tile seamlessly at any font and cell aspect; pass `false` to keep font rendering.
