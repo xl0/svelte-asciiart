@@ -195,6 +195,22 @@ describe('parseAnsi', () => {
 		expect(spans(`${E}]0;ti\ntle${E}\\after\nnext`).length).toBe(2);
 	});
 
+	it('captures OSC 8 hyperlinks and closes them on an empty URI', () => {
+		const [row] = spans(`${E}]8;;https://ex.com${E}\\click${E}]8;;${E}\\ here`);
+		expect(row[0]).toEqual({ text: 'click', link: 'https://ex.com' });
+		expect(row[1]).toEqual({ text: ' here' });
+	});
+
+	it('keeps links across SGR changes, params field and BEL termination', () => {
+		const [row] = spans(`${E}]8;id=1;https://ex.com\x07a${E}[31mb${E}[0mc${E}]8;;\x07`);
+		expect(row.map((s) => s.link)).toEqual(['https://ex.com', 'https://ex.com', 'https://ex.com']);
+		expect(row[1].fill).toBe('#cd3131');
+	});
+
+	it('drops unsafe link schemes', () => {
+		expect(spans(`${E}]8;;javascript:alert(1)${E}\\x${E}]8;;${E}\\`)[0][0].link).toBeUndefined();
+	});
+
 	it('strips OSC sequences (BEL- or ST-terminated)', () => {
 		expect(spans(`${E}]8;;https://ex.com${E}\\link${E}]8;;${E}\\`)[0][0].text).toBe('link');
 		expect(spans(`${E}]0;title\x07after`)[0][0].text).toBe('after');

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- OSC 8 hyperlinks in `text` render as clickable anchors (web-safe schemes only).
+
 ## [0.1.1] - 2026-08-15
 
 ### Added

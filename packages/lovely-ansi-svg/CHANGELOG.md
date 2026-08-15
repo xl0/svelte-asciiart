@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- OSC 8 hyperlinks render as SVG `<a href>` anchors — clickable in browsers and most viewers. Web-safe schemes only (`http`/`https`/`ftp`/`mailto`); linked box-drawing chars render as text so they stay clickable.
+
 ## [0.1.1] - 2026-08-15
 
 ### Added

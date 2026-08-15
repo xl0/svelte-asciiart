@@ -20,6 +20,8 @@ export interface GlyphRun {
 	blink?: boolean;
 	/** Every cluster is a custom-drawable char (box drawing / block elements) — the renderer may draw shapes instead of text. */
 	custom?: boolean;
+	/** OSC 8 hyperlink target. */
+	link?: string;
 	cols: number[];
 	text: string;
 }
@@ -46,9 +48,10 @@ const sameFg = (a: Style, b: Style) =>
 	a.italic === b.italic &&
 	a.underline === b.underline &&
 	a.strike === b.strike &&
-	a.blink === b.blink;
+	a.blink === b.blink &&
+	a.link === b.link;
 
-const fgOf = ({ fill, bold, italic, underline, strike, blink }: Style) => ({ fill, bold, italic, underline, strike, blink });
+const fgOf = ({ fill, bold, italic, underline, strike, blink, link }: Style) => ({ fill, bold, italic, underline, strike, blink, link });
 
 /**
  * Lay a parsed row out on the column grid: segment the row text into grapheme
@@ -93,8 +96,9 @@ export function layoutRow(row: ParsedRow): LayoutRow {
 			runs.push({ ...fgOf(style), cols: [col], text: cl });
 		} else {
 			// custom-drawable chars go into runs of their own kind, so the
-			// renderer can swap a whole run for drawn shapes
-			const custom = isCustomGlyph(cl.charCodeAt(0)) || undefined;
+			// renderer can swap a whole run for drawn shapes; linked chars stay
+			// text — a drawn shape would not be clickable
+			const custom = (style.link === undefined && isCustomGlyph(cl.charCodeAt(0))) || undefined;
 			if (!cur || !sameFg(cur, style) || cur.custom !== custom) {
 				flush();
 				cur = { ...fgOf(style), custom, cols: [], text: '' };

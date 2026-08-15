@@ -63,7 +63,7 @@ const svg = exportSvg(text, {
 
 ### ANSI support
 
-16-color, 256-color (`38;5;n`) and truecolor (`38;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; per-attribute resets (blink is parsed but not rendered). Style state persists across lines. Unknown codes are consumed; non-SGR escapes (cursor movement, OSC hyperlinks, DCS/sixel payloads — even spanning newlines) are stripped. Tabs expand to 8-column stops. CJK and emoji occupy two cells; grapheme clusters (ZWJ emoji, combining marks) are never torn apart, even by escapes.
+16-color, 256-color (`38;5;n`) and truecolor (`38;2;r;g;b`) foregrounds and backgrounds; bold, dim, italic, underline, strikethrough, inverse; per-attribute resets (blink is parsed but not rendered). OSC 8 hyperlinks become SVG `<a href>` anchors — clickable in browsers and most viewers; only web-safe schemes (`http`/`https`/`ftp`/`mailto`) survive, and linked box-drawing chars render as text so they stay clickable. Style state persists across lines. Unknown codes are consumed; other non-SGR escapes (cursor movement, DCS/sixel payloads — even spanning newlines) are stripped. Tabs expand to 8-column stops. CJK and emoji occupy two cells; grapheme clusters (ZWJ emoji, combining marks) are never torn apart, even by escapes.
 
 Box-drawing and block characters (U+2500–U+259F — lines, corners, doubles, dashes, arcs, diagonals, blocks, shades, quadrants) are drawn as exact-cell rects/paths instead of font glyphs, so they tile seamlessly at any font and cell aspect — font-rendered box characters overshoot or underfill the cell depending on the font. Drawn glyphs always fill the whole cell, ignoring `glyphScale`. Pass `customGlyphs: false` to render them as text.
 
@@ -133,6 +133,8 @@ interface Style {
 	underline?: boolean;
 	strike?: boolean;
 	blink?: boolean;
+	/** OSC 8 hyperlink target (web-safe schemes only). */
+	link?: string;
 }
 ```
 
@@ -223,6 +225,8 @@ interface RenderedShape {
 interface RenderedRun {
 	/** Inline CSS (fill, font-weight, …); absent for default-styled text. */
 	style?: string;
+	/** OSC 8 hyperlink target — wrap the tspan in an `<a href>`. */
+	href?: string;
 	/** Space-separated x list, one per code point. */
 	x: string;
 	text: string;

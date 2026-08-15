@@ -163,7 +163,11 @@
 		{#if row.runs.length}
 			<text y={row.y} font-size={model.fontSize} fill="currentColor" xml:space="preserve">
 				{#each row.runs as run}
-					<tspan style={run.style} x={run.x}>{run.text}</tspan>
+					{#if run.href}
+						<a href={run.href}><tspan style={run.style} x={run.x}>{run.text}</tspan></a>
+					{:else}
+						<tspan style={run.style} x={run.x}>{run.text}</tspan>
+					{/if}
 				{/each}
 			</text>
 		{/if}
