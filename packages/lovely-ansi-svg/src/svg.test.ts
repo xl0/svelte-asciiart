@@ -137,7 +137,8 @@ describe('exportSvg', () => {
 
 	it('wraps linked runs in an SVG anchor', () => {
 		const svg = exportSvg(`${E}]8;;https://ex.com${E}\\hi${E}]8;;${E}\\ there`);
-		expect(svg).toContain('<a href="https://ex.com"><tspan');
+		// color: inherit keeps UA :link/:visited colors from overriding currentColor
+		expect(svg).toContain('<a href="https://ex.com" style="color: inherit"><tspan');
 		expect(svg).toContain('</tspan></a>');
 		expect(svg.match(/<a /g)).toHaveLength(1);
 	});

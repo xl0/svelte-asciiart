@@ -164,7 +164,8 @@
 			<text y={row.y} font-size={model.fontSize} fill="currentColor" xml:space="preserve">
 				{#each row.runs as run}
 					{#if run.href}
-						<a href={run.href}><tspan style={run.style} x={run.x}>{run.text}</tspan></a>
+						<!-- color: inherit — UA :link/:visited colors must not hijack currentColor fills -->
+						<a href={run.href} style="color: inherit"><tspan style={run.style} x={run.x}>{run.text}</tspan></a>
 					{:else}
 						<tspan style={run.style} x={run.x}>{run.text}</tspan>
 					{/if}

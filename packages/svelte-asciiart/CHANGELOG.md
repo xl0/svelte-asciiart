@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Hyperlinks no longer take the browser's default `:link`/`:visited` colors — a visited link rendered near-black whatever the theme.
+
 ## [0.1.2] - 2026-08-15
 
 ### Added

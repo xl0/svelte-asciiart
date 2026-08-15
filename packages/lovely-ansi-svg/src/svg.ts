@@ -272,7 +272,9 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 		const tspans = row.runs
 			.map((run) => {
 				const t = `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`;
-				return run.href ? `<a href="${escAttr(run.href)}">${t}</a>` : t;
+				// color: inherit stops the UA :link/:visited colors from hijacking
+				// currentColor fills — a visited link would go near-black
+				return run.href ? `<a href="${escAttr(run.href)}" style="color: inherit">${t}</a>` : t;
 			})
 			.join('');
 		// xml:space on each <text>: rasterizers don't reliably inherit it from

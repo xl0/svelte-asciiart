@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Hyperlink anchors carry `color: inherit`, so the browser's default `:link`/`:visited` colors no longer override `currentColor` fills — a visited link rendered near-black whatever the theme.
+
 ## [0.1.2] - 2026-08-15
 
 ### Added
