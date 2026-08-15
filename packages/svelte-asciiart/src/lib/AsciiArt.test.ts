@@ -185,6 +185,16 @@ describe('AsciiArt', () => {
 		expect(container.querySelector('rect')!.style.fill).toBe('rgb(0, 0, 255)');
 	});
 
+	it('draws box-drawing chars as paths, or text with customGlyphs off', async () => {
+		const drawn = await render(AsciiArt, { text: '┌─┐', ...A });
+		expect(drawn.container.querySelectorAll('path').length).toBe(1);
+		expect(drawn.container.querySelector('tspan')).toBeFalsy();
+
+		const off = await render(AsciiArt, { text: '┌─┐', customGlyphs: false, ...A });
+		expect(off.container.querySelector('path')).toBeFalsy();
+		expect(off.container.querySelector('tspan')!.textContent).toBe('┌─┐');
+	});
+
 	it('renders without a text prop', async () => {
 		const { container } = await render(AsciiArt, {});
 		expect(container.querySelector('svg')).toBeTruthy();

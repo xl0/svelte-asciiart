@@ -10,6 +10,7 @@ export {
 	type RenderedBg,
 	type RenderedRow,
 	type RenderedRun,
+	type RenderedShape,
 	type RenderModel,
 	type RenderOptions
 } from './svg.js';

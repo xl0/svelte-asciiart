@@ -31,6 +31,8 @@
 		cellSize?: number;
 		/** Color theme the ANSI escapes resolve through: 16-color palette + default fg/bg. */
 		theme?: Theme;
+		/** Draw box-drawing/block chars (U+2500–U+259F) as exact-cell shapes instead of font glyphs; default true. */
+		customGlyphs?: boolean;
 	}
 
 	let {
@@ -44,6 +46,7 @@
 		glyphScale = 1,
 		cellSize = 50,
 		theme,
+		customGlyphs = true,
 		...rest
 	}: Props = $props();
 
@@ -59,7 +62,8 @@
 		const el = svgEl;
 		const measure = () => {
 			const m = measureCellMetrics(getComputedStyle(el).fontFamily);
-			if (m && (m.cellAspect !== measured?.cellAspect || m.baseline !== measured?.baseline)) measured = m;
+			if (m && (m.cellAspect !== measured?.cellAspect || m.baseline !== measured?.baseline))
+				measured = m;
 		};
 		// the hidden probe glyph's bounding box tracks the resolved font, so the
 		// observer fires on anything that changes it: --ascii-font-family flips on
@@ -83,7 +87,8 @@
 			cellAspect: cellAspect === 'auto' ? measured?.cellAspect : cellAspect,
 			baseline: cellAspect === 'auto' ? measured?.baseline : undefined,
 			glyphScale,
-			cellSize
+			cellSize,
+			customGlyphs
 		})
 	);
 
@@ -147,6 +152,12 @@
 			stroke-width={model.frame.strokeWidth}
 		/>
 	{/if}
+
+	{#each model.rows as row}
+		{#each row.shapes as s}
+			<path style={s.style} d={s.d} />
+		{/each}
+	{/each}
 
 	{#each model.rows as row}
 		{#if row.runs.length}

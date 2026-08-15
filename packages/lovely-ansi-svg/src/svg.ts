@@ -1,5 +1,6 @@
 import { parseAnsi } from './ansi.js';
 import { fmt } from './fmt.js';
+import { customGlyph } from './glyphs.js';
 import { layout, type GlyphRun, type LayoutRow } from './layout.js';
 import { defaultTheme, type Theme } from './theme.js';
 
@@ -25,6 +26,8 @@ export interface RenderOptions {
 	glyphScale?: number;
 	/** Pixels per cell (height) for the intrinsic width/height attributes; default 50. */
 	cellSize?: number;
+	/** Draw box-drawing/block chars (U+2500–U+259F) as exact-cell shapes instead of font glyphs; default true. */
+	customGlyphs?: boolean;
 }
 
 export interface RenderedRun {
@@ -42,11 +45,18 @@ export interface RenderedBg {
 	width: string;
 	height: string;
 }
+/** A custom-drawn glyph path (box drawing / block elements), one per style. */
+export interface RenderedShape {
+	d: string;
+	/** Inline CSS: fill or stroke, always explicit. */
+	style: string;
+}
 export interface RenderedRow {
 	/** text baseline y */
 	y: string;
 	runs: RenderedRun[];
 	bgs: RenderedBg[];
+	shapes: RenderedShape[];
 }
 
 /**
@@ -73,8 +83,7 @@ function runStyle(run: GlyphRun): string | undefined {
 	if (run.fill) parts.push(`fill: ${run.fill}`);
 	if (run.bold) parts.push('font-weight: bold');
 	if (run.italic) parts.push('font-style: italic');
-	if (run.underline || run.strike)
-		parts.push(`text-decoration:${run.underline ? ' underline' : ''}${run.strike ? ' line-through' : ''}`);
+	if (run.underline || run.strike) parts.push(`text-decoration:${run.underline ? ' underline' : ''}${run.strike ? ' line-through' : ''}`);
 	// blink is parsed but deliberately not rendered
 	return parts.length ? parts.join('; ') : undefined;
 }
@@ -114,23 +123,39 @@ export function render(layoutRows: LayoutRow[], options: RenderOptions = {}): Re
 	const baselineY = (1 - glyphScale) / 2 + baseline * glyphScale;
 	const cellX = (c: number) => fmt(offsetX + c * cellAspect + glyphInset);
 
+	const drawGlyphs = options.customGlyphs !== false;
 	const rows: RenderedRow[] = Array.from({ length: renderRows }, (_, r) => {
 		const built = layoutRows[r];
-		if (!built) return { y: fmt(offsetY + r + baselineY), runs: [], bgs: [] };
+		if (!built) return { y: fmt(offsetY + r + baselineY), runs: [], bgs: [], shapes: [] };
+		const runs: RenderedRun[] = [];
+		// custom-glyph paths, accumulated per style so a row of box drawing
+		// stays one <path>; drawn full-cell (no glyphScale inset) — exact
+		// tiling is the point
+		const shapeAcc = new Map<string, string>();
+		for (const run of built.runs) {
+			if (drawGlyphs && run.custom) {
+				const color = run.fill ?? 'currentColor';
+				for (let i = 0; i < run.text.length; i++) {
+					const g = customGlyph(run.text.charCodeAt(i), offsetX + run.cols[i] * cellAspect, offsetY + r, cellAspect);
+					const style =
+						g.strokeWidth !== undefined
+							? `fill: none; stroke: ${color}; stroke-width: ${fmt(g.strokeWidth)}`
+							: `fill: ${color}${g.opacity !== undefined ? `; fill-opacity: ${fmt(g.opacity)}` : ''}`;
+					shapeAcc.set(style, (shapeAcc.get(style) ?? '') + g.d);
+				}
+			} else runs.push({ style: runStyle(run), x: run.cols.map(cellX).join(' '), text: run.text });
+		}
 		return {
 			y: fmt(offsetY + r + baselineY),
-			runs: built.runs.map((run) => ({
-				style: runStyle(run),
-				x: run.cols.map(cellX).join(' '),
-				text: run.text
-			})),
+			runs,
 			bgs: built.bgs.map((b) => ({
 				style: `fill: ${b.fill}`,
 				x: fmt(offsetX + b.start * cellAspect),
 				y: fmt(offsetY + r),
 				width: fmt((b.end - b.start) * cellAspect),
 				height: '1'
-			}))
+			})),
+			shapes: Array.from(shapeAcc, ([style, d]) => ({ d, style }))
 		};
 	});
 
@@ -219,8 +244,7 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 	}
 
 	for (const row of model.rows)
-		for (const b of row.bgs)
-			out.push(`<rect${attr('style', b.style)} x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"/>`);
+		for (const b of row.bgs) out.push(`<rect${attr('style', b.style)} x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"/>`);
 
 	if (model.grid)
 		out.push(
@@ -239,11 +263,11 @@ export function exportSvg(text: string, options: ExportSvgOptions = {}): string 
 				`/>`
 		);
 
+	for (const row of model.rows) for (const s of row.shapes) out.push(`<path${attr('style', s.style)} d="${s.d}"/>`);
+
 	for (const row of model.rows) {
 		if (!row.runs.length) continue;
-		const tspans = row.runs
-			.map((run) => `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`)
-			.join('');
+		const tspans = row.runs.map((run) => `<tspan${attr('style', run.style)} x="${run.x}">${escText(run.text)}</tspan>`).join('');
 		// xml:space on each <text>: rasterizers don't reliably inherit it from
 		// the root, and collapsed space runs would mis-slot the per-char x list
 		out.push(`<text y="${row.y}" font-size="${model.fontSize}" fill="currentColor" xml:space="preserve">${tspans}</text>`);

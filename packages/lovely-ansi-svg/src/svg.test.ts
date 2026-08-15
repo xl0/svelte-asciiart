@@ -58,11 +58,30 @@ describe('render', () => {
 		});
 	});
 
+	it('draws box-drawing chars as shapes, merged per style', () => {
+		const m = model(`a─\x1b[31m│\x1b[0m`);
+		expect(m.rows[0].runs).toEqual([{ style: undefined, x: '0', text: 'a' }]);
+		expect(m.rows[0].shapes).toEqual([
+			{ d: 'M0.6 0.45h0.3v0.1h-0.3ZM0.9 0.45h0.3v0.1h-0.3Z', style: 'fill: currentColor' },
+			{ d: 'M1.45 0h0.1v0.5h-0.1ZM1.45 0.5h0.1v0.5h-0.1Z', style: 'fill: #cd3131' }
+		]);
+	});
+
+	it('customGlyphs: false keeps box drawing as text', () => {
+		const m = model('─', { customGlyphs: false });
+		expect(m.rows[0].shapes).toEqual([]);
+		expect(m.rows[0].runs[0].text).toBe('─');
+	});
+
+	it('exports custom glyphs as path elements', () => {
+		const svg = exportSvg('┌─┐');
+		expect(svg).toContain('<path style="fill: currentColor" d="M');
+		expect(svg).not.toContain('<text');
+	});
+
 	it('formats run styling as one inline-CSS string', () => {
 		const m = model(`${E}[1;3;4;9;31mx`);
-		expect(m.rows[0].runs[0].style).toBe(
-			'fill: #cd3131; font-weight: bold; font-style: italic; text-decoration: underline line-through'
-		);
+		expect(m.rows[0].runs[0].style).toBe('fill: #cd3131; font-weight: bold; font-style: italic; text-decoration: underline line-through');
 	});
 });
 

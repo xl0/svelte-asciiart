@@ -25,19 +25,20 @@ npm install svelte-asciiart
 
 ## Props
 
-| Prop         | Type                                                             | Default     | Description                                                          |
-| ------------ | ---------------------------------------------------------------- | ----------- | -------------------------------------------------------------------- |
-| `text`       | `string`                                                         | `''`        | The art to render; may contain ANSI SGR escapes                      |
-| `rows`       | `number`                                                         | auto        | Frame rows (content can overflow into the margin)                    |
-| `cols`       | `number`                                                         | auto        | Frame columns (content can overflow into the margin)                 |
-| `margin`     | `number \| [number, number] \| [number, number, number, number]` | `0`         | Margin around the frame in grid cells (top/right/bottom/left)        |
-| `grid`       | `boolean \| string`                                              | `false`     | Cell grid lines: `true` = default faint stroke, string = CSS class   |
-| `frame`      | `boolean \| string`                                              | `false`     | Border around the frame: `true` = default stroke, string = CSS class |
-| `cellAspect` | `number \| 'auto'`                                               | `'auto'`    | Cell width/height ratio; `'auto'` measures the rendered font         |
-| `glyphScale` | `number`                                                         | `1`         | Glyph size as a fraction of the cell height                          |
-| `cellSize`   | `number`                                                         | `50`        | Pixels per cell for the intrinsic SVG size (exports, fixed scale)    |
-| `theme`      | `Theme`                                                          | VS Code-ish | Color theme ANSI escapes resolve through (palette + default fg/bg)   |
-| `...rest`    | `SVGAttributes<SVGSVGElement>`                                   | -           | All other SVG attributes are forwarded to the `<svg>` element        |
+| Prop           | Type                                                             | Default     | Description                                                                |
+| -------------- | ---------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `text`         | `string`                                                         | `''`        | The art to render; may contain ANSI SGR escapes                            |
+| `rows`         | `number`                                                         | auto        | Frame rows (content can overflow into the margin)                          |
+| `cols`         | `number`                                                         | auto        | Frame columns (content can overflow into the margin)                       |
+| `margin`       | `number \| [number, number] \| [number, number, number, number]` | `0`         | Margin around the frame in grid cells (top/right/bottom/left)              |
+| `grid`         | `boolean \| string`                                              | `false`     | Cell grid lines: `true` = default faint stroke, string = CSS class         |
+| `frame`        | `boolean \| string`                                              | `false`     | Border around the frame: `true` = default stroke, string = CSS class       |
+| `cellAspect`   | `number \| 'auto'`                                               | `'auto'`    | Cell width/height ratio; `'auto'` measures the rendered font               |
+| `glyphScale`   | `number`                                                         | `1`         | Glyph size as a fraction of the cell height                                |
+| `cellSize`     | `number`                                                         | `50`        | Pixels per cell for the intrinsic SVG size (exports, fixed scale)          |
+| `theme`        | `Theme`                                                          | VS Code-ish | Color theme ANSI escapes resolve through (palette + default fg/bg)         |
+| `customGlyphs` | `boolean`                                                        | `true`      | Draw box/block chars (U+2500–U+259F) as exact-cell shapes, not font glyphs |
+| `...rest`      | `SVGAttributes<SVGSVGElement>`                                   | -           | All other SVG attributes are forwarded to the `<svg>` element              |
 
 The svg stretches to its container by default; for a fixed on-screen scale pass `style="width: auto; height: auto"` (the intrinsic size is `cellSize` px per cell).
 
@@ -85,6 +86,8 @@ The 16 base colors resolve through the `theme` prop (VS Code-ish default) as inl
 256-color and truecolor values are spec-fixed and render as-is.
 
 Character widths are display-based: CJK and emoji occupy two cells and stay aligned with box-drawing art.
+
+Box-drawing and block characters (U+2500–U+259F) are drawn as exact-cell shapes instead of font glyphs, so lines and blocks tile seamlessly whatever the font or cell aspect; pass `customGlyphs={false}` to render them as text.
 
 Pass `aria-label` to describe the art — the svg then has `role="img"`; without a label it renders as `role="presentation"` (decorative).
 

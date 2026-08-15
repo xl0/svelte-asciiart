@@ -1,4 +1,5 @@
 import type { ParsedRow, Style } from './ansi.js';
+import { isCustomGlyph } from './glyphs.js';
 import { clusters, clusterWidth } from './width.js';
 
 /**
@@ -17,6 +18,8 @@ export interface GlyphRun {
 	underline?: boolean;
 	strike?: boolean;
 	blink?: boolean;
+	/** Every cluster is a custom-drawable char (box drawing / block elements) — the renderer may draw shapes instead of text. */
+	custom?: boolean;
 	cols: number[];
 	text: string;
 }
@@ -38,7 +41,12 @@ export interface LayoutRow {
 const EMPTY: Style = {};
 
 const sameFg = (a: Style, b: Style) =>
-	a.fill === b.fill && a.bold === b.bold && a.italic === b.italic && a.underline === b.underline && a.strike === b.strike && a.blink === b.blink;
+	a.fill === b.fill &&
+	a.bold === b.bold &&
+	a.italic === b.italic &&
+	a.underline === b.underline &&
+	a.strike === b.strike &&
+	a.blink === b.blink;
 
 const fgOf = ({ fill, bold, italic, underline, strike, blink }: Style) => ({ fill, bold, italic, underline, strike, blink });
 
@@ -81,9 +89,12 @@ export function layoutRow(row: ParsedRow): LayoutRow {
 			flush();
 			runs.push({ ...fgOf(style), cols: [col], text: cl });
 		} else {
-			if (!cur || !sameFg(cur, style)) {
+			// custom-drawable chars go into runs of their own kind, so the
+			// renderer can swap a whole run for drawn shapes
+			const custom = isCustomGlyph(cl.charCodeAt(0)) || undefined;
+			if (!cur || !sameFg(cur, style) || cur.custom !== custom) {
 				flush();
-				cur = { ...fgOf(style), cols: [], text: '' };
+				cur = { ...fgOf(style), custom, cols: [], text: '' };
 			}
 			cur.cols.push(col);
 			cur.text += cl;

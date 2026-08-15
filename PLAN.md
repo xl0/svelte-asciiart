@@ -59,10 +59,10 @@ via GitHub search), so the breaking window is free.
       — the 2FA prompt needs a TTY).
 - [ ] Point lovely-mermaid at `lovely-ansi-svg` (separate repo/session) —
       their `scripts/gen-demo-svg.ts` collapses to `toAnsi()` + `exportSvg()`.
-- [ ] Custom-drawn box/block glyphs (xterm `customGlyphs` approach): draw
-      U+2500–U+259F as exact-cell rects/paths instead of font glyphs — the
-      structural fix for glyph overshoot/overlap (mermaid feedback; measured
-      baseline helps placement but doesn't remove it).
+- [x] Custom-drawn box/block glyphs (xterm `customGlyphs` approach):
+      U+2500–U+259F drawn as exact-cell rects/paths (`src/glyphs.ts`),
+      on by default with a `customGlyphs: false` opt-out — the structural
+      fix for glyph overshoot/overlap.
 
 ## Notes
 

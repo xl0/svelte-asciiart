@@ -150,8 +150,10 @@ function applySgr(state: SgrState, params: number[]): void {
 
 function styleOf(state: SgrState, theme: Theme): Style {
 	// 16-color codes index the theme palette: 30-37/40-47 → 0-7, 90-97/100-107 → 8-15
-	let fill = state.fgFill ?? (state.fgCode !== undefined ? theme.palette[state.fgCode < 40 ? state.fgCode - 30 : state.fgCode - 82] : undefined);
-	let bgFill = state.bgFill ?? (state.bgCode !== undefined ? theme.palette[state.bgCode < 50 ? state.bgCode - 40 : state.bgCode - 92] : undefined);
+	let fill =
+		state.fgFill ?? (state.fgCode !== undefined ? theme.palette[state.fgCode < 40 ? state.fgCode - 30 : state.fgCode - 82] : undefined);
+	let bgFill =
+		state.bgFill ?? (state.bgCode !== undefined ? theme.palette[state.bgCode < 50 ? state.bgCode - 40 : state.bgCode - 92] : undefined);
 	const defaultBg = theme.background ?? 'Canvas';
 	// inverse is a fg/bg swap: a missing bg becomes a default-text-color block,
 	// a missing fg paints the glyphs in the default background color
