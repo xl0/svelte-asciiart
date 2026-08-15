@@ -11,8 +11,9 @@
  * `.github/workflows/publish.yml`, which stages the builds on npm and creates
  * the GitHub Release. The script then waits for each staged version to appear,
  * asks for a 2FA code and approves it — that approval is what actually
- * publishes. `--no-push` stops at the tag so the commit can be inspected
- * first; nothing reaches npm until it is pushed.
+ * publishes. After tagging, the script pauses with a release summary and
+ * asks before pushing — that is the point to inspect the commit; `--no-push`
+ * stops there without asking. Nothing reaches npm until it is pushed.
  *
  * Writing changelog entries is `/cl`'s job, not this script's — everything
  * here is mechanical, which is what makes the unattended push at the end
@@ -129,12 +130,30 @@ await $`git add bun.lock ${rollable.map((r) => r.path)} ${pkgs.map((p) => p.pkgP
 await $`git commit -m ${`chore(release): ${version}`}`;
 await $`git tag -a ${`v${version}`} -m ${`release ${version}`}`;
 
-if (!push) {
-	console.log(`
-Committed and tagged v${version}; nothing was pushed. Publish it with:
+// Inspection gate: the release exists only locally at this point. Show what
+// it is and confirm before the push kicks off CI.
+console.log(`
+=== v${version} committed and tagged, nothing pushed yet ===
 
-  git push origin master v${version}
+  packages:   ${pkgs.map((p) => `${p.name}@${version}`).join(', ')}
+  changelogs: ${rollable.map((r) => r.path).join(', ') || '(none rolled)'}
+
+Inspect with: git show HEAD --stat && git show HEAD
 `);
+const manualInstructions = `
+Nothing was pushed. Publish later with:
+
+  git push --no-follow-tags origin master && git push origin v${version}
+
+then approve what CI stages: npm stage list <pkg> / npm stage approve <id>.
+To abandon instead: git tag -d v${version} && git reset --hard HEAD~1
+`;
+if (!push) {
+	console.log(manualInstructions);
+	process.exit(0);
+}
+if (prompt(`Push master + v${version} and kick off the CI publish? [y/N]`)?.trim().toLowerCase() !== 'y') {
+	console.log(manualInstructions);
 	process.exit(0);
 }
 
